@@ -1,0 +1,27 @@
+# PorciniCast v2.5.0 - Requirements SUPER AVANZATO
+# Versioni testate per compatibilità scientifica
+
+# === CORE WEB FRAMEWORK ===
+fastapi==0.104.1
+uvicorn[standard]==0.24.0
+
+# === HTTP CLIENT ===
+httpx==0.25.2
+
+# === SCIENTIFIC COMPUTING ===
+# Gestite dal Dockerfile per evitare compilation errors
+# numpy==1.24.4  # Installato via Docker
+# scipy==1.10.1  # Installato via Docker
+
+# === CLIMATE DATA & GEOSPATIAL ===
+cdsapi==0.6.7
+netCDF4==1.6.2
+geohash2==1.1
+
+# === UTILITIES ===
+python-multipart==0.0.5
+python-json-logger==2.0.4
+
+# === PERFORMANCE ===
+uvloop==0.17.0
+httptools==0.5.0

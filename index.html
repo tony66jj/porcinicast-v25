@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Trova Porcini – Analisi v2.5.0</title>
+  <style>
+    :root{
+      --bg:#0b0d10; --panel:#12161b; --muted:#8aa0b6; --text:#e6eef6;
+      --accent:#62d5b4; --accent-2:#8bb7ff; --danger:#ff6b6b; --warn:#ffc857; --ok:#66e28a;
+      --shadow:0 8px 24px rgba(0,0,0,.35);
+      --radius:14px;
+    }
+    *{box-sizing:border-box}
+    html,body{margin:0;background:linear-gradient(180deg,#0a0c0f 0%,#0d1218 100%);color:var(--text);font:16px/1.5 system-ui,Segoe UI,Roboto,Helvetica,Arial,sans-serif}
+    a{color:var(--accent-2)}
+    .wrap{max-width:1200px;margin:32px auto;padding:0 16px}
+    header{display:flex;gap:16px;align-items:center;margin-bottom:18px;flex-wrap:wrap}
+    header h1{font-size:22px;margin:0}
+    header .badge{padding:4px 10px;border-radius:999px;background:linear-gradient(90deg,#1b2230,#17202b);color:#cfe6ff;border:1px solid #283343}
+    .panel{background:linear-gradient(180deg,#12161b,#0f141a);border:1px solid #1e2937;border-radius:var(--radius);box-shadow:var(--shadow)}
+    .panel h3{margin:0 0 8px 0;font-size:18px}
+    .controls{display:grid;grid-template-columns:1.1fr .8fr .8fr .8fr .8fr auto;gap:10px;align-items:end;padding:16px}
+    label{font-size:12px;color:var(--muted);display:block;margin-bottom:6px}
+    input[type=text],input[type=number],select{
+      width:100%;padding:10px 12px;border-radius:10px;border:1px solid #243142;background:#0d141b;color:var(--text)
+    }
+    .btn{padding:10px 14px;border-radius:12px;border:1px solid #2a384b;background:linear-gradient(180deg,#1b2430,#151c26);color:#e9f5ff;font-weight:600;cursor:pointer;transition:all 0.2s ease}
+    .btn:hover{transform:translateY(-1px);box-shadow:0 6px 16px rgba(0,0,0,.28)}
+    .btn.success{background:linear-gradient(180deg,#28a745,#1e7e34);border-color:#1e7e34}
+    .btn.secondary{background:linear-gradient(180deg,#6c757d,#545b62);border-color:#545b62}
+    .grid{display:grid;gap:14px;padding:16px}
+    .grid.g2{grid-template-columns:1fr 1fr}
+    .grid.g3{grid-template-columns:1.1fr .9fr .9fr}
+    .grid.g4{grid-template-columns:repeat(4,1fr)}
+    .metric{display:flex;gap:12px;align-items:center}
+    .metric .k{font-size:12px;color:var(--muted)}
+    .metric .v{font-size:22px;font-weight:700}
+    .chip{display:inline-flex;gap:8px;align-items:center;padding:6px 10px;border-radius:999px;border:1px solid #273244;background:#0f1520;color:#cfe6ff;font-size:12px}
+    .chip.ok{border-color:#224733;background:#0f1a14;color:#b9f3cf}
+    .chip.warn{border-color:#4a3b1a;background:#1a160f;color:#ffe0a3}
+    .chip.bad{border-color:#4a1a1a;background:#1a0f10;color:#ffb9b9}
+    .section{padding:16px}
+    .hr{height:1px;background:linear-gradient(90deg,transparent,#253244,transparent);margin:12px 0}
+    #chart{width:100%;height:160px;border-radius:12px;background:linear-gradient(180deg,#0c1015,#0b0f14);border:1px solid #1e2937}
+    table{width:100%;border-collapse:collapse;border:1px solid #232f40;border-radius:12px;overflow:hidden}
+    th,td{padding:8px 10px;border-bottom:1px solid #232f40;font-size:13px}
+    th{background:#131922;color:#b7c9dd;text-align:left}
+    tr:hover td{background:#0f141b}
+    .events ul{margin:6px 0 0 18px}
+    .events li{margin:2px 0}
+    details{background:#0e141b;border:1px solid #203045;border-radius:12px;padding:10px}
+    summary{cursor:pointer;font-weight:600}
+    .muted{color:#93a7bd}
+    .mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+    footer{margin:24px 0 40px;color:#8aa0b6;font-size:12px;text-align:center}
+    .confidence-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:8px;margin-top:8px}
+    .confidence-item{text-align:center;padding:8px;background:#0a0f14;border-radius:8px;border:1px solid #1e2937}
+    .confidence-label{font-size:10px;color:var(--muted);margin-bottom:4px}
+    .confidence-value{font-size:14px;font-weight:600}
+    
+    /* Stili migliorati per sezione crowdsource */
+    .crowdsource{
+      background:linear-gradient(135deg,#1a2332,#0f1419);
+      border:2px solid #2a4a3d;
+      margin-top:20px;
+      padding:20px!important;
+    }
+    .crowdsource h3{color:#66e28a;margin-bottom:16px;font-size:20px}
+    .crowdsource h4{color:var(--accent);margin:12px 0 8px 0;font-size:16px}
+    .input-group{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:12px}
+    .input-group input, .input-group select{flex:1;min-width:120px}
+    .input-group input[type="text"]{min-width:250px}
+    
+    .stats-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:12px}
+    .stat-item{text-align:center;padding:12px;background:#0a0f14;border-radius:10px;border:1px solid #1e2937}
+    .stat-value{font-size:20px;font-weight:700;color:var(--accent)}
+    .stat-label{font-size:11px;color:var(--muted);margin-top:4px}
+    .notification{position:fixed;top:20px;right:20px;padding:12px 16px;border-radius:8px;color:white;font-weight:600;z-index:1000;transform:translateX(400px);transition:transform 0.3s ease}
+    .notification.show{transform:translateX(0)}
+    .notification.success{background:#28a745}
+    .notification.error{background:#dc3545}
+    .version-badge{background:linear-gradient(45deg,#667eea,#764ba2);padding:3px 8px;border-radius:12px;font-size:11px;font-weight:600}
+    
+    /* Stili per analisi dettagliata */
+    .field-analysis{
+      background:#0a0f14;
+      border-radius:12px;
+      padding:16px;
+      margin-top:12px;
+      line-height:1.7;
+    }
+    .field-analysis h4{
+      color:var(--accent);
+      margin:20px 0 12px 0;
+      font-size:16px;
+      border-bottom:1px solid #1e2937;
+      padding-bottom:8px;
+    }
+    .field-analysis h4:first-child{margin-top:0}
+    .field-analysis p{margin:8px 0;color:#d8e3f0}
+    .field-analysis em{color:var(--muted);font-style:italic}
+    .field-analysis strong{color:#fff;font-weight:600}
+    .return-advice{
+      background:linear-gradient(135deg,#1a2a3e,#0f1925);
+      border-left:4px solid var(--accent);
+      padding:12px;
+      border-radius:8px;
+      margin:16px 0!important;
+    }
+    
+    @media (max-width: 768px) {
+      .controls{grid-template-columns:1fr;gap:8px}
+      .grid.g3{grid-template-columns:1fr}
+      .grid.g4{grid-template-columns:1fr 1fr}
+      .input-group{flex-direction:column;align-items:stretch}
+      .crowdsource .grid.g2{grid-template-columns:1fr}
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <h1>🍄 Trova Porcini — Analisi Scientifica Avanzata</h1>
+      <span class="badge version-badge">v2.5.0</span>
+      <span class="badge">SUPER AVANZATO</span>
+      <span class="badge">Lag Biologico Dinamico</span>
+    </header>
+
+    <!-- Controls -->
+    <div class="panel">
+      <div class="controls">
+        <div>
+          <label>Località (geocoding)</label>
+          <input id="q" type="text" placeholder="Es. Abbadia San Salvatore" />
+        </div>
+        <div>
+          <label>Latitudine</label>
+          <input id="lat" type="number" step="0.0001" placeholder="42.88" />
+        </div>
+        <div>
+          <label>Longitudine</label>
+          <input id="lon" type="number" step="0.0001" placeholder="11.63" />
+        </div>
+        <div>
+          <label>Habitat</label>
+          <select id="habitat">
+            <option value="">(auto da OSM)</option>
+            <option>castagno</option><option>faggio</option><option>quercia</option>
+            <option>conifere</option><option>misto</option><option>altro</option>
+          </select>
+        </div>
+        <div>
+          <label>Ore sul campo</label>
+          <select id="hours">
+            <option>2</option><option selected>4</option><option>6</option><option>8</option>
+          </select>
+        </div>
+        <div style="display:flex;gap:8px;">
+          <button id="btnGeo" class="btn" title="Cerca">🔎 Cerca</button>
+          <button id="btnRun" class="btn" title="Analizza">📈 Analizza</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- KPIs Principali -->
+    <div class="grid g3">
+      <div class="panel section">
+        <h3>🎯 Indice Oggi</h3>
+        <div class="metric"><div class="k">Forza flush</div><div id="k-index" class="v">—</div></div>
+        <div class="hr"></div>
+        <div class="metric"><div class="k">Finestra migliore</div><div id="k-window" class="v">—</div></div>
+        <div style="margin-top:8px;">
+          <span id="k-model-version" class="chip">v2.5.0</span>
+          <span id="k-has-validations" class="chip">validazioni: —</span>
+        </div>
+      </div>
+      
+      <div class="panel section">
+        <h3>🔬 Affidabilità 5D</h3>
+        <div class="confidence-grid">
+          <div class="confidence-item">
+            <div class="confidence-label">Meteo</div>
+            <div id="conf-met" class="confidence-value">—</div>
+          </div>
+          <div class="confidence-item">
+            <div class="confidence-label">Eco</div>
+            <div id="conf-eco" class="confidence-value">—</div>
+          </div>
+          <div class="confidence-item">
+            <div class="confidence-label">Hydro</div>
+            <div id="conf-hydro" class="confidence-value">—</div>
+          </div>
+          <div class="confidence-item">
+            <div class="confidence-label">Atmo</div>
+            <div id="conf-atmo" class="confidence-value">—</div>
+          </div>
+          <div class="confidence-item">
+            <div class="confidence-label">Emp</div>
+            <div id="conf-emp" class="confidence-value">—</div>
+          </div>
+        </div>
+        <div class="hr"></div>
+        <div class="metric">
+          <div class="k">Overall</div>
+          <div id="conf-overall" class="v" style="color:var(--accent)">—</div>
+        </div>
+      </div>
+      
+      <div class="panel section">
+        <h3>🍄 Dimensioni & Raccolto</h3>
+        <div class="metric"><div class="k">Taglia media</div><div id="k-size" class="v">—</div></div>
+        <div class="metric"><div class="k">Range</div><div id="k-size-range" class="v">—</div></div>
+        <div class="hr"></div>
+        <div class="metric"><div class="k">Raccolto atteso</div><div id="k-harvest" class="v" style="font-size:18px">—</div></div>
+        <div class="muted" id="k-harvest-note" style="font-size:11px;margin-top:4px"></div>
+      </div>
+    </div>
+
+    <!-- Forecast chart -->
+    <div class="panel section">
+      <h3>📈 Previsione Prossimi 10 Giorni (Lag Biologico Dinamico)</h3>
+      <div style="margin-bottom:8px;color:var(--muted);font-size:12px;">
+        ✨ <strong>v2.5:</strong> Lag biologico basato su Boddy et al. (2014) • Soglie adattive • Confidence 5D • Savitzky-Golay
+      </div>
+      <canvas id="chart"></canvas>
+    </div>
+
+    <!-- Analisi dettagliata campo -->
+    <div class="panel section">
+      <h3>🧭 Analisi Dettagliata e Consigli Scientifici</h3>
