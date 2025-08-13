@@ -1736,33 +1736,31 @@ async def api_score_super_advanced(
                 "species": species, "events_count": len(rain_events)
             }
             
-            background_tasks.add_task(
-                save_prediction_super_advanced,
-                lat, lon, datetime.now().date().isoformat(),
-                current_index, species, habitat_used,
-                confidence_5d, weather_metadata, model_features
-            )
-        
-        logger.info(f"Super advanced analysis completed: {current_index}/100 for {species} ({processing_time}ms)")
+               try:
+        background_tasks.add_task(
+            save_prediction_super_advanced,
+            lat, lon, datetime.now().date().isoformat(),
+            current_index, species, habitat_used,
+            confidence_5d, weather_metadata, model_features
+        )
+
+        logger.info(
+            f"Super advanced analysis completed: {current_index}/100 for {species} "
+            f"({processing_time}ms)"
+        )
         return response_payload
-        
-      except Exception as e:
-    # tempo di elaborazione fino al fallimento
-    processing_time = round((time.time() - start_time) * 1000, 1)
 
-    # log con stack-trace completo
-    logger.exception(
-        f"Error in /api/score for ({lat:.5f}, {lon:.5f}): {e}"
-    )
+    except Exception as e:
+        # tempo di elaborazione fino al fallimento
+        processing_time = round((time.time() - start_time) * 1000, 1)
 
-    # risposta JSON coerente col resto dell’API
-    return {
-        "error": "internal_error",
-        "detail": str(e),
-        "model_version": "2.5.0",
-        "processing_time_ms": processing_time
-    }
+        # log con stack-trace completo
+        logger.exception(f"Error in /api/score for ({lat:.5f}, {lon:.5f}): {e}")
 
-
-
-
+        # risposta JSON coerente col resto dell’API
+        return {
+            "error": "internal_error",
+            "detail": str(e),
+            "model_version": "2.5.0",
+            "processing_time_ms": processing_time
+        }
