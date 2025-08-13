@@ -1749,3 +1749,15 @@ async def api_score_super_advanced(
     except Exception as e:
         processing_time = round((time.time() - start_time) * 1000, 1)
         logger.error(f
+       from fastapi import FastAPI
+
+try:
+    app  # già definita nel tuo file
+except NameError:
+    app = FastAPI()
+
+@app.get("/api/health")
+def health():
+    return {"status": "ok", "version": "2.5.x"}
+              
+
