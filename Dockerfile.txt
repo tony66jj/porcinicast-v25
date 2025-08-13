@@ -1,9 +1,9 @@
-# PorciniCast v2.5.0 - Dockerfile SUPER AVANZATO
-# Risolve tutti i problemi di build dependencies
+# Dockerfile per Trova Porcini API v2.5.0 SUPER AVANZATO
+# Risolve problemi Render mantenendo TUTTE le funzionalità avanzate
 
 FROM python:3.11-slim
 
-# Environment variables ottimizzate
+# Variabili ambiente ottimizzate
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1 \
@@ -12,40 +12,38 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
-# Installa dipendenze di sistema per scipy/numpy
+# Aggiorna sistema e installa dipendenze di sistema per scipy/numpy
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     gfortran \
     libopenblas-dev \
     liblapack-dev \
-    libhdf5-dev \
     pkg-config \
     && rm -rf /var/lib/apt/lists/*
 
-# Aggiorna pip e build tools
-RUN pip install --upgrade pip==23.3.1 setuptools==68.2.2 wheel==0.41.2
+# Aggiorna pip e setuptools alle versioni più recenti
+RUN pip install --upgrade pip setuptools wheel
 
-# Installa numpy e scipy PRIMA con binary wheels
-RUN pip install --only-binary=all --no-deps numpy==1.24.4
-RUN pip install --only-binary=all --no-deps scipy==1.10.1
+# Installa prima le dipendenze scientifiche con pre-compiled wheels
+RUN pip install --only-binary=all numpy==1.24.4
+RUN pip install --only-binary=all scipy==1.10.1
 
-# Installa requirements passo dopo passo
+# Copia requirements e installa resto delle dipendenze
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copia il codice dell'applicazione
+# Copia il codice
 COPY main.py .
 
 # Crea directory per database e logs
-RUN mkdir -p data logs && \
-    chmod 755 data logs
+RUN mkdir -p data logs
 
-# Health check per monitoraggio
-HEALTHCHECK --interval=30s --timeout=30s --start-period=10s --retries=3 \
-    CMD python -c "import requests; requests.get(f'http://localhost:{__import__('os').environ.get('PORT', 8787)}/api/health', timeout=10)" || exit 1
+# Health check
+HEALTHCHECK --interval=30s --timeout=30s --start-period=5s --retries=3 \
+    CMD python -c "import requests; requests.get('http://localhost:$PORT/api/health')" || exit 1
 
-# Espone porta dinamica per Render
+# Usa PORT dinamico di Render
 EXPOSE $PORT
 
-# Comando di avvio ottimizzato
+# Comando di avvio ottimizzato per produzione
 CMD uvicorn main:app --host 0.0.0.0 --port $PORT --workers 1 --loop uvloop --http httptools
