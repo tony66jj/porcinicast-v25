@@ -1746,18 +1746,21 @@ async def api_score_super_advanced(
         logger.info(f"Super advanced analysis completed: {current_index}/100 for {species} ({processing_time}ms)")
         return response_payload
         
-    except Exception as e:
+       except Exception as e:
+        # tempo di elaborazione fino al fallimento
         processing_time = round((time.time() - start_time) * 1000, 1)
-        logger.error(f
-       from fastapi import FastAPI
 
-try:
-    app  # già definita nel tuo file
-except NameError:
-    app = FastAPI()
+        # log completo dello stack-trace
+        logger.exception(
+            f"Error in /api/score for ({lat:.5f}, {lon:.5f}): {e}"
+        )
 
-@app.get("/api/health")
-def health():
-    return {"status": "ok", "version": "2.5.x"}
-              
+        # risposta JSON coerente col resto dell’API
+        return {
+            "error": "internal_error",
+            "detail": str(e),
+            "model_version": "2.5.0",
+            "processing_time_ms": processing_time
+        }
+
 
