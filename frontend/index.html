@@ -485,7 +485,17 @@
           autohabitat: habitat ? '0' : '1'
         });
         
-        const response = await fetch(`${API_BASE}/api/score?${params}`);
+        
+// === ESPOSIZIONE (auto/manuale) ===
+try {
+  const aspectModeEl = document.getElementById('aspect-mode');
+  const aspectOctEl  = document.getElementById('aspect-octant');
+  const aspectMode   = aspectModeEl ? aspectModeEl.value : 'auto';
+  const aspectManual = aspectOctEl  ? (aspectOctEl.value || '') : '';
+  params.set('autoaspect', aspectMode === 'auto' ? '1' : '0');
+  params.set('aspect', aspectMode === 'manual' ? aspectManual : '');
+} catch (e) { console.warn('Aspect params not wired:', e); }
+const response = await fetch(`${API_BASE}/api/score?${params}`);
         if (!response.ok) {
             const errData = await response.json().catch(() => ({ detail: 'Errore generico' }));
             throw new Error(`HTTP ${response.status}: ${errData.detail || 'Errore sconosciuto'}`);
@@ -816,23 +826,20 @@
 
 
     function updateTempTables(data) {
+      const tempDiv = document.getElementById('temp-past-table');
+      if (!tempDiv) return;
       try {
-        const tempDiv = document.getElementById('temp-past-table');
-        if (!tempDiv) return;
-        if (data.temp_past && Object.keys(data.temp_past).length > 0) {
-          // Ordina per data crescente e poi mostra gli ultimi 15
+        if (data.temp_past && Object.keys(data.temp_past).length) {
           const rows = Object.entries(data.temp_past)
             .sort((a,b)=>new Date(a[0]) - new Date(b[0]))
             .slice(-15)
-            .map(([date, t]) => `<tr><td>${formatDate(date)}</td><td>${Number(t).toFixed(1)}</td></tr>`)
+            .map(([d,t]) => `<tr><td>${formatDate(d)}</td><td>${Number(t).toFixed(1)}</td></tr>`)
             .join('');
           tempDiv.innerHTML = `<table><tr><th>Data</th><th>T media (°C)</th></tr>${rows}</table>`;
         } else {
           tempDiv.innerHTML = '<p class="muted">Nessun dato temperatura.</p>';
         }
-      } catch (e) {
-        console.error('Errore updateTempTables', e);
-      }
+      } catch (e) { console.error('updateTempTables error', e); }
     }
 );
       
@@ -1032,7 +1039,6 @@
             }
             
             updateRainTables(data);
-            updateTempTables(data);
             updateFlushEvents(data);
             updateFieldAnalysis(data);
             
@@ -1122,6 +1128,7 @@
       }, 1000);
       
       try {
+        let map;
         // Inizializzazione Mappa Leaflet
         map = L.map('map').setView([42.5, 12.5], 6);
         L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
@@ -1172,4 +1179,3 @@
   </script>
 </body>
 </html>
-
