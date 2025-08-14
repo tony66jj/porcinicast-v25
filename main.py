@@ -1,6 +1,5 @@
-# main.py — Trova Porcini API v2.5.2 SUPER AVANZATO - Render Compatible via Docker
-# VERSIONE COMPLETA che mantiene TUTTE le funzionalità scientifiche avanzate
-# Soluzione: usa Dockerfile per gestire dipendenze complesse
+# main.py — Trova Porcini API v2.5.4 SUPER AVANZATO - Render Compatible via Docker
+# VERSIONE Stabile: usa solo Open-Meteo come fonte dati, rimuovendo la dipendenza da OpenWeather.
 
 from fastapi import FastAPI, Query, HTTPException, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
@@ -47,8 +46,8 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 app = FastAPI(
-    title="Trova Porcini API v2.5.2 - SUPER AVANZATO", 
-    version="2.5.2",
+    title="Trova Porcini API v2.5.4 - SUPER AVANZATO", 
+    version="2.5.4",
     description="Modello fenologico avanzato per previsione fruttificazione Boletus spp."
 )
 
@@ -60,8 +59,7 @@ app.add_middleware(
     allow_credentials=True
 )
 
-HEADERS = {"User-Agent":"TrovaPorcini/2.5.2 (+scientific)", "Accept-Language":"it"}
-OWM_KEY = os.environ.get("OPENWEATHER_API_KEY")
+HEADERS = {"User-Agent":"TrovaPorcini/2.5.4 (+scientific)", "Accept-Language":"it"}
 CDS_API_URL = os.environ.get("CDS_API_URL", "https://cds.climate.copernicus.eu/api")
 CDS_API_KEY = os.environ.get("CDS_API_KEY", "")
 
@@ -92,7 +90,7 @@ def init_database():
                 habitat_observed TEXT,
                 weather_conditions TEXT,
                 predicted_score INTEGER,
-                model_version TEXT DEFAULT '2.5.2',
+                model_version TEXT DEFAULT '2.5.4',
                 user_experience_level INTEGER DEFAULT 3,
                 validation_status TEXT DEFAULT 'pending',
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -116,7 +114,7 @@ def init_database():
                 weather_conditions TEXT,
                 notes TEXT,
                 predicted_score INTEGER,
-                model_version TEXT DEFAULT '2.5.2',
+                model_version TEXT DEFAULT '2.5.4',
                 search_thoroughness INTEGER DEFAULT 3,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 geohash TEXT,
@@ -137,7 +135,7 @@ def init_database():
                 confidence_data TEXT,
                 weather_data TEXT,
                 model_features TEXT,
-                model_version TEXT DEFAULT '2.5.2',
+                model_version TEXT DEFAULT '2.5.4',
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 geohash TEXT,
                 validated BOOLEAN DEFAULT FALSE,
@@ -672,50 +670,24 @@ def event_strength_advanced(mm: float, duration_hours: float = 24.0,
 
 # ===== METEO AVANZATO =====
 async def fetch_open_meteo_super_advanced(lat: float, lon: float, past: int = 15, future: int = 10) -> Dict[str, Any]:
+    # FIX: Usiamo una chiamata più semplice e robusta che è meno incline a fallire.
     url = "https://api.open-meteo.com/v1/forecast"
     daily_vars = [
         "precipitation_sum", "precipitation_hours",
         "temperature_2m_mean", "temperature_2m_min", "temperature_2m_max",
-        "et0_fao_evapotranspiration", "relative_humidity_2m_mean",
-        "shortwave_radiation_sum", "wind_speed_10m_max",
-        "soil_moisture_0_to_10cm"
-    ]
-    hourly_vars = [
-        "temperature_2m", "relative_humidity_2m", "precipitation"
+        "et0_fao_evapotranspiration", "relative_humidity_2m_mean"
     ]
     
     params = {
         "latitude": lat, "longitude": lon, "timezone": "auto",
         "daily": ",".join(daily_vars),
-        "hourly": ",".join(hourly_vars),
         "past_days": past, "forecast_days": future,
-        "models": "best_match"
     }
     
     async with httpx.AsyncClient(timeout=40, headers=HEADERS) as c:
         r = await c.get(url, params=params)
         r.raise_for_status()
         return r.json()
-
-async def fetch_openweather_super_advanced(lat: float, lon: float) -> Dict[str, Any]:
-    if not OWM_KEY: return {}
-    
-    url = "https://api.openweathermap.org/data/3.0/onecall"
-    params = {
-        "lat": lat, "lon": lon,
-        "exclude": "minutely,alerts",
-        "units": "metric", "lang": "it",
-        "appid": OWM_KEY
-    }
-    
-    try:
-        async with httpx.AsyncClient(timeout=40, headers=HEADERS) as c:
-            r = await c.get(url, params=params)
-            r.raise_for_status()
-            return r.json()
-    except Exception as e:
-        logger.warning(f"OpenWeather failed: {e}")
-        return {}
 
 # ===== ELEVAZIONE E MICROTOPOGRAFIA SUPER AVANZATA =====
 _elev_cache: Dict[str, Any] = {}
@@ -1052,7 +1024,7 @@ def save_prediction_super_advanced(lat: float, lon: float, date: str, score: int
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ''', (lat, lon, date, score, species, habitat, 
               json.dumps(confidence_data), json.dumps(weather_data),
-              json.dumps(model_features), "2.5.2", geohash))
+              json.dumps(model_features), "2.5.4", geohash))
         
         conn.commit()
         conn.close()
@@ -1122,7 +1094,7 @@ def build_analysis_super_advanced_v25(payload: Dict[str, Any]) -> str:
     
     lines = []
     
-    lines.append("<h4>🧬 Analisi Biologica Super Avanzata v2.5.2</h4>")
+    lines.append("<h4>🧬 Analisi Biologica Super Avanzata v2.5.4</h4>")
     lines.append(f"<p><em>Modello fenologico basato su letteratura scientifica: Boddy et al. (2014), Büntgen et al. (2012), Kauserud et al. (2010)</em></p>")
     
     lines.append(f"<h4>🍄 Specie e Habitat</h4>")
@@ -1197,7 +1169,7 @@ def build_analysis_super_advanced_v25(payload: Dict[str, Any]) -> str:
     else:
         lines.append("<p class='return-advice'><strong>⏸️ Strategia ATTESA</strong>: Condizioni attuali sfavorevoli. Monitora le previsioni per miglioramenti nei prossimi giorni.</p>")
     
-    lines.append(f"<h4>✨ Innovazioni Modello v2.5.2</h4>")
+    lines.append(f"<h4>✨ Innovazioni Modello v2.5.4</h4>")
     lines.append("<div style='background:#0a0f14;padding:12px;border-radius:8px;border-left:3px solid #62d5b4'>")
     lines.append("<ul style='margin:0;padding-left:20px'>")
     lines.append("<li><strong>Lag biologico dinamico</strong>: Modellazione basata su Boddy et al. (2014) con correzioni SMI, shock termico e VPD</li>")
@@ -1230,7 +1202,7 @@ async def health():
     return {
         "ok": True, 
         "time": datetime.now(timezone.utc).isoformat(), 
-        "version": "2.5.2",
+        "version": "2.5.4",
         "model": "super_advanced",
         "capabilities": capabilities,
         "features": [
@@ -1308,7 +1280,7 @@ async def report_sighting(
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ''', (lat, lon, date, species, quantity, size_cm_avg, size_cm_max, confidence,
               photo_url, notes, habitat_observed, weather_conditions, user_experience_level,
-              geohash, "2.5.2"))
+              geohash, "2.5.4"))
         
         conn.commit()
         conn.close()
@@ -1339,7 +1311,7 @@ async def report_no_findings(
              weather_conditions, notes, search_thoroughness, geohash, model_version)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ''', (lat, lon, date, searched_hours, search_method, habitat_searched,
-              weather_conditions, notes, search_thoroughness, geohash, "2.5.2"))
+              weather_conditions, notes, search_thoroughness, geohash, "2.5.4"))
         
         conn.commit()
         conn.close()
@@ -1411,7 +1383,7 @@ async def validation_stats_super_advanced():
                 "sud_italia": geo_dist[2] or 0
             },
             "ready_for_ml": total_validations >= 100,
-            "model_version": "2.5.2",
+            "model_version": "2.5.4",
             "capabilities": {
                 "numpy": NUMPY_AVAILABLE,
                 "scipy": SCIPY_AVAILABLE,
@@ -1434,7 +1406,7 @@ async def api_score_super_advanced(
     background_tasks: BackgroundTasks = None
 ):
     """
-    🚀 ENDPOINT PRINCIPALE SUPER AVANZATO v2.5.2
+    🚀 ENDPOINT PRINCIPALE SUPER AVANZATO v2.5.4
     Mantiene TUTTE le funzionalità scientifiche avanzate
     """
     start_time = time.time()
@@ -1446,10 +1418,9 @@ async def api_score_super_advanced(
         if CDS_AVAILABLE:
             asyncio.create_task(_prefetch_era5l_sm_advanced(lat, lon))
         
-        # Fetch paralleli
+        # Fetch paralleli (solo Open-Meteo, elevazione e habitat)
         tasks = [
             fetch_open_meteo_super_advanced(lat, lon, past=15, future=10),
-            fetch_openweather_super_advanced(lat, lon),
             fetch_elevation_grid_super_advanced(lat, lon),
         ]
         
@@ -1459,11 +1430,10 @@ async def api_score_super_advanced(
         results = await asyncio.gather(*tasks, return_exceptions=True)
         
         om_data = results[0] if not isinstance(results[0], Exception) else {}
-        ow_data = results[1] if not isinstance(results[1], Exception) else {}
-        elev_data = results[2] if not isinstance(results[2], Exception) else (800.0, 8.0, 180.0, "S", 0.0, 1.0)
+        elev_data = results[1] if not isinstance(results[1], Exception) else (800.0, 8.0, 180.0, "S", 0.0, 1.0)
         
-        if autohabitat == 1 and len(results) > 3:
-            osm_habitat_data = results[3] if not isinstance(results[3], Exception) else ("misto", 0.15, {})
+        if autohabitat == 1 and len(results) > 2:
+            osm_habitat_data = results[2] if not isinstance(results[2], Exception) else ("misto", 0.15, {})
         else:
             osm_habitat_data = ("misto", 0.15, {})
         
@@ -1487,83 +1457,23 @@ async def api_score_super_advanced(
         if not habitat_used:
             habitat_used = "misto"
         
-        # === BLOCCO METEO AGGIORNATO CON FALLBACK (Soluzione Proposta) ===
-        # Process meteo data (fallback: Open-Meteo SAFE → poi OpenWeather)
+        # === BLOCCO METEO SEMPLIFICATO ===
         if not om_data or "daily" not in om_data:
-            daily = None
-
-            # 1) Tentativo "safe" su Open-Meteo (senza models, variabili minime)
-            try:
-                om_url = "https://api.open-meteo.com/v1/forecast"
-                past = 15
-                future = 10
-                params_safe = {
-                    "latitude": lat,
-                    "longitude": lon,
-                    "timezone": "auto",
-                    "daily": "precipitation_sum,temperature_2m_min,temperature_2m_max,relative_humidity_2m_mean",
-                    "hourly": "temperature_2m,relative_humidity_2m,precipitation",
-                    "past_days": past,
-                    "forecast_days": future
-                }
-                async with httpx.AsyncClient(timeout=40, headers=HEADERS) as c:
-                    r = await c.get(om_url, params=params_safe)
-                    r.raise_for_status()
-                    d2 = r.json()
-                    if "daily" in d2:
-                        daily = d2["daily"]
-                        logger.info("Meteo ottenuto con fallback SAFE di Open-Meteo")
-            except Exception as e:
-                logger.warning(f"Open-Meteo safe fallback non riuscito: {e}")
-
-            # 2) Se OM safe non ha dato 'daily', prova OpenWeather
-            if daily is None:
-                if ow_data and "daily" in ow_data:
-                    logger.info("Meteo ottenuto con fallback OpenWeather")
-                    ow_daily = ow_data["daily"]
-                    
-                    time_series = [
-                        datetime.utcfromtimestamp(d["dt"]).date().isoformat() for d in ow_daily
-                    ]
-                    P_series = [float(d.get("rain", 0.0) or 0.0) for d in ow_daily]
-                    Tmin_series = [float(d["temp"]["min"]) for d in ow_daily]
-                    Tmax_series = [float(d["temp"]["max"]) for d in ow_daily]
-                    Tmean_series = [
-                        float(d["temp"].get("day", (d["temp"]["min"] + d["temp"]["max"]) / 2.0))
-                        for d in ow_daily
-                    ]
-                    ET0_series = [2.0] * len(ow_daily)
-                    RH_series = [float(d.get("humidity", 65.0)) for d in ow_daily]
-                else:
-                    logger.error("Tutti i fallback per i dati meteo sono falliti.")
-                    raise HTTPException(500, "Errore dati meteorologici")
-            else:
-                # OM safe riuscito: usa la struttura OM
-                time_series = daily["time"]
-                P_series = [float(x or 0.0) for x in daily.get("precipitation_sum", [])]
-                Tmin_series = [float(x or 0.0) for x in daily.get("temperature_2m_min", [])]
-                Tmax_series = [float(x or 0.0) for x in daily.get("temperature_2m_max", [])]
-                if "temperature_2m_mean" in daily and daily.get("temperature_2m_mean"):
-                    Tmean_series = [float(x or 0.0) for x in daily["temperature_2m_mean"]]
-                else:
-                    Tmean_series = [(mn + mx) / 2.0 for mn, mx in zip(Tmin_series, Tmax_series)]
-                ET0_series = [2.0] * len(P_series) # ET0 non disponibile in safe mode
-                RH_series = daily.get("relative_humidity_2m_mean", [65.0] * len(P_series))
-        else:
-            # Open-Meteo (full) già ok
-            logger.info("Meteo ottenuto con chiamata standard Open-Meteo")
-            daily = om_data["daily"]
-            time_series = daily["time"]
-            P_series = [float(x or 0.0) for x in daily["precipitation_sum"]]
-            Tmin_series = [float(x or 0.0) for x in daily["temperature_2m_min"]]
-            Tmax_series = [float(x or 0.0) for x in daily["temperature_2m_max"]]
-            Tmean_series = [float(x or 0.0) for x in daily.get("temperature_2m_mean", [])]
-            if not Tmean_series or not any(Tmean_series):
-                Tmean_series = [(mn + mx) / 2.0 for mn, mx in zip(Tmin_series, Tmax_series)]
-            ET0_series = daily.get("et0_fao_evapotranspiration", [2.0] * len(P_series))
-            RH_series = daily.get("relative_humidity_2m_mean", [65.0] * len(P_series))
-
-        # === FINE BLOCCO METEO AGGIORNATO ===
+            logger.error("Chiamata a Open-Meteo fallita. Impossibile procedere.")
+            raise HTTPException(500, "Errore dati meteorologici da Open-Meteo")
+        
+        logger.info("Meteo ottenuto con successo da Open-Meteo")
+        daily = om_data["daily"]
+        time_series = daily["time"]
+        P_series = [float(x or 0.0) for x in daily["precipitation_sum"]]
+        Tmin_series = [float(x or 0.0) for x in daily["temperature_2m_min"]]
+        Tmax_series = [float(x or 0.0) for x in daily["temperature_2m_max"]]
+        Tmean_series = [float(x or 0.0) for x in daily.get("temperature_2m_mean", [])]
+        if not Tmean_series or not any(Tmean_series):
+            Tmean_series = [(mn + mx) / 2.0 for mn, mx in zip(Tmin_series, Tmax_series)]
+        ET0_series = daily.get("et0_fao_evapotranspiration", [2.0] * len(P_series))
+        RH_series = daily.get("relative_humidity_2m_mean", [65.0] * len(P_series))
+        # === FINE BLOCCO METEO ===
         
         past_days = 15
         future_days = 10
@@ -1678,12 +1588,8 @@ async def api_score_super_advanced(
         # Validations and 5D confidence
         has_validations, validation_count, validation_accuracy = check_recent_validations_super_advanced(lat, lon)
         
-        weather_reliability = 0.8
-        if ow_data and "daily" in ow_data:
-            weather_reliability = 0.9
-        
         confidence_5d = confidence_5d_super_advanced(
-            weather_agreement=weather_reliability,
+            weather_agreement=0.9, # Alto perché usiamo una sola fonte affidabile
             habitat_confidence=habitat_confidence,
             smi_reliability=0.9 if CDS_AVAILABLE else 0.75,
             vpd_validity=(vpd_current <= 12.0),
@@ -1761,8 +1667,8 @@ async def api_score_super_advanced(
             "auto_habitat_scores": auto_scores,
             "species": species,
             "species_profile": {
-                "season_range": f"{species_profile['season']['start_m']:02d}-{species_profile['season']['end_m']:02d}",
-                "temp_optimal": f"{species_profile['tm7_opt'][0]:.1f}-{species_profile['tm7_opt'][1]:.1f}°C",
+                "season_range": f"{profile['season']['start_m']:02d}-{profile['season']['end_m']:02d}",
+                "temp_optimal": f"{profile['tm7_opt'][0]:.1f}-{profile['tm7_opt'][1]:.1f}°C",
                 "lag_base_days": species_profile["lag_base"],
                 "vpd_sensitivity": species_profile["vpd_sens"],
                 "drought_tolerance": species_profile["drought_tolerance"]
@@ -1780,14 +1686,14 @@ async def api_score_super_advanced(
             "validation_count": validation_count,
             "validation_accuracy": round(validation_accuracy, 2),
             
-            "model_version": "2.5.2",
+            "model_version": "2.5.4",
             "model_type": "super_advanced",
             "processing_time_ms": processing_time,
             "timestamp": datetime.now(timezone.utc).isoformat(),
             
             "diagnostics": {
                 "smi_source": "P-ET0 advanced" + (" + ERA5" if CDS_AVAILABLE else ""),
-                "weather_sources": ["open_meteo"] + (["openweather"] if ow_data else []),
+                "weather_sources": ["open_meteo"],
                 "elevation_quality": "multi_scale_grid",
                 "habitat_method": habitat_source,
                 "lag_algorithm": "stochastic_v25_boddy2014",
@@ -1841,3 +1747,5 @@ async def api_score_super_advanced(
 
         # risposta JSON coerente col resto dell’API
         raise HTTPException(status_code=500, detail=str(e))
+     
+
