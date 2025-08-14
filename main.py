@@ -1,4 +1,4 @@
-   @app.get("/api/score")
+@app.get("/api/score")
 async def api_score_hybrid_weather(
     lat: float = Query(..., description="Latitudine"),
     lon: float = Query(..., description="Longitudine"),
