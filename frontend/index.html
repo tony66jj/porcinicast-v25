@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Trova Porcini – Analisi v2.5.0</title>
+  <title>Trova Porcini – Analisi v2.5.5</title>
   
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
@@ -63,7 +63,6 @@
     .confidence-label{font-size:10px;color:var(--muted);margin-bottom:4px}
     .confidence-value{font-size:14px;font-weight:600}
     
-    /* Stili per la mappa interattiva */
     #map {
       height: 450px;
       width: 100%;
@@ -136,7 +135,7 @@
   <div class="wrap">
     <header>
       <h1>🍄 Trova Porcini — Analisi Scientifica Avanzata</h1>
-      <span class="badge version-badge">v2.5.1</span>
+      <span class="badge version-badge">v2.5.5</span>
       <span class="badge">Lag Biologico Dinamico</span>
     </header>
 
@@ -186,7 +185,7 @@
         <div class="hr"></div>
         <div class="metric"><div class="k">Finestra migliore</div><div id="k-window" class="v">—</div></div>
         <div style="margin-top:8px;">
-          <span id="k-model-version" class="chip">v2.5.1</span>
+          <span id="k-model-version" class="chip">v2.5.5</span>
           <span id="k-has-validations" class="chip">validazioni: —</span>
         </div>
       </div>
@@ -328,7 +327,7 @@
     </div>
 
     <footer>
-      <p>🍄 <strong>PorciniCast v2.5.1</strong> — Modello fenologico scientifico per previsione fruttificazione <em>Boletus</em> spp.</p>
+      <p>🍄 <strong>PorciniCast v2.5.5</strong> — Modello fenologico scientifico per previsione fruttificazione <em>Boletus</em> spp.</p>
       <p>Basato su letteratura peer-reviewed: Boddy & Heilmann-Clausen (2014), Büntgen et al. (2012), Kauserud et al. (2010)</p>
       <p>Sviluppato con FastAPI • NumPy/SciPy • SQLite • Docker • Crowd-sourcing ML-ready • Mappa Interattiva Leaflet.js</p>
     </footer>
@@ -395,7 +394,7 @@
         const response = await fetch(`${API_BASE}/api/score?${params}`);
         if (!response.ok) {
             const errData = await response.json().catch(() => ({ detail: 'Errore generico' }));
-            throw new Error(`HTTP ${response.status}: ${errData.detail}`);
+            throw new Error(`HTTP ${response.status}: ${errData.detail || 'Errore sconosciuto'}`);
         }
         return await response.json();
       } catch (error) {
@@ -603,7 +602,6 @@
       }
     }
     
-    // NUOVA LOGICA DI ANALISI INTELLIGENTE
     async function handleAnalysis() {
         let lat = parseFloat(document.getElementById('lat').value);
         let lon = parseFloat(document.getElementById('lon').value);
@@ -612,7 +610,6 @@
         setLoading(true);
 
         try {
-            // Se lat/lon non sono validi, ma c'è una query di testo, esegui geocoding prima
             if ((!lat || !lon || isNaN(lat) || isNaN(lon)) && query) {
                 showNotification('Coordinate non valide, uso la località testuale...', 'warn');
                 const geoResult = await geocodeLocation(query);
@@ -729,7 +726,7 @@
           mapMarker = L.marker(e.latlng).addTo(map);
         }
         
-        showNotification('Coordinate selezionate dalla mappa. Clicca "Analizza".', 'success');
+        showNotification('Coordinate selezionate. Avvio analisi...', 'success');
         handleAnalysis(); // Avvia l'analisi automaticamente
       });
       
