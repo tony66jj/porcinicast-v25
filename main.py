@@ -1,4 +1,4 @@
-# main.py — Trova Porcini API v2.5.4 SUPER AVANZATO - Render Compatible via Docker
+# main.py — Trova Porcini API v2.5.5 SUPER AVANZATO - Render Compatible via Docker
 # VERSIONE Stabile: usa solo Open-Meteo come fonte dati, rimuovendo la dipendenza da OpenWeather.
 
 from fastapi import FastAPI, Query, HTTPException, BackgroundTasks
@@ -46,20 +46,20 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 app = FastAPI(
-    title="Trova Porcini API v2.5.4 - SUPER AVANZATO", 
-    version="2.5.4",
+    title="Trova Porcini API v2.5.5 - SUPER AVANZATO",
+    version="2.5.5",
     description="Modello fenologico avanzato per previsione fruttificazione Boletus spp."
 )
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"], 
-    allow_methods=["*"], 
-    allow_headers=["*"], 
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
     allow_credentials=True
 )
 
-HEADERS = {"User-Agent":"TrovaPorcini/2.5.4 (+scientific)", "Accept-Language":"it"}
+HEADERS = {"User-Agent":"TrovaPorcini/2.5.5 (+scientific)", "Accept-Language":"it"}
 CDS_API_URL = os.environ.get("CDS_API_URL", "https://cds.climate.copernicus.eu/api")
 CDS_API_KEY = os.environ.get("CDS_API_KEY", "")
 
@@ -90,7 +90,7 @@ def init_database():
                 habitat_observed TEXT,
                 weather_conditions TEXT,
                 predicted_score INTEGER,
-                model_version TEXT DEFAULT '2.5.4',
+                model_version TEXT DEFAULT '2.5.5',
                 user_experience_level INTEGER DEFAULT 3,
                 validation_status TEXT DEFAULT 'pending',
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -114,7 +114,7 @@ def init_database():
                 weather_conditions TEXT,
                 notes TEXT,
                 predicted_score INTEGER,
-                model_version TEXT DEFAULT '2.5.4',
+                model_version TEXT DEFAULT '2.5.5',
                 search_thoroughness INTEGER DEFAULT 3,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 geohash TEXT,
@@ -135,7 +135,7 @@ def init_database():
                 confidence_data TEXT,
                 weather_data TEXT,
                 model_features TEXT,
-                model_version TEXT DEFAULT '2.5.4',
+                model_version TEXT DEFAULT '2.5.5',
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 geohash TEXT,
                 validated BOOLEAN DEFAULT FALSE,
@@ -461,7 +461,7 @@ def smi_from_p_et0_advanced(P: List[float], ET0: List[float]) -> List[float]:
         if valid.size >= 10:
             p10, p90 = np.percentile(valid, [10, 90])
         else:
-            p10, p90 = float(arr.min()), float(arr.max())
+            p10, p90 = (float(arr.min()), float(arr.max())) if valid.size > 0 else (-1, 1)
             if p90 - p10 < 1e-6: p10, p90 = p10-1, p90+1
         
         normalized = (arr - p10) / max(1e-6, (p90 - p10))
@@ -485,7 +485,7 @@ def smi_fallback_pure_python(P: List[float], ET0: List[float]) -> List[float]:
         p90_idx = min(len(sorted_xs)-1, int(0.9 * len(sorted_xs)))
         p10, p90 = sorted_xs[p10_idx], sorted_xs[p90_idx]
     else:
-        p10, p90 = min(xs) if xs else -1.0, max(xs) if xs else 1.0
+        p10, p90 = (min(xs), max(xs)) if xs else (-1.0, 1.0)
         if p90-p10 < 1e-6: p10, p90 = p10-1, p90+1
     
     return [clamp((x-p10)/(p90-p10), 0.0, 1.0) for x in xs]
@@ -588,7 +588,6 @@ def infer_porcino_species_super_advanced(habitat_used: str, month: int, elev_m: 
         
         score = 1.0
         
-        # FIX: Corretto l'accesso alla chiave 'peak_m' che si trova dentro 'season'
         if month in profile["season"]["peak_m"]:
             score *= 1.5
         elif profile["season"]["start_m"] <= month <= profile["season"]["end_m"]:
@@ -1024,7 +1023,7 @@ def save_prediction_super_advanced(lat: float, lon: float, date: str, score: int
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ''', (lat, lon, date, score, species, habitat, 
               json.dumps(confidence_data), json.dumps(weather_data),
-              json.dumps(model_features), "2.5.4", geohash))
+              json.dumps(model_features), "2.5.5", geohash))
         
         conn.commit()
         conn.close()
@@ -1077,7 +1076,7 @@ def check_recent_validations_super_advanced(lat: float, lon: float, days: int = 
         return False, 0, 0.0
 
 # ===== ANALISI TESTUALE SUPER AVANZATA =====
-def build_analysis_super_advanced_v25(payload: Dict[str, Any]) -> str:
+def build_analysis_super_advanced_v25(payload: Dict[str, Any], species_profile: Dict[str, Any]) -> str:
     idx = payload["index"]
     best = payload.get("best_window", {})
     elev = payload["elevation_m"]
@@ -1094,14 +1093,14 @@ def build_analysis_super_advanced_v25(payload: Dict[str, Any]) -> str:
     
     lines = []
     
-    lines.append("<h4>🧬 Analisi Biologica Super Avanzata v2.5.4</h4>")
+    lines.append("<h4>🧬 Analisi Biologica Super Avanzata v2.5.5</h4>")
     lines.append(f"<p><em>Modello fenologico basato su letteratura scientifica: Boddy et al. (2014), Büntgen et al. (2012), Kauserud et al. (2010)</em></p>")
     
     lines.append(f"<h4>🍄 Specie e Habitat</h4>")
     lines.append(f"<p><strong>Specie dominante predetta</strong>: <em>Boletus {species}</em></p>")
     lines.append(f"<p><strong>Habitat principale</strong>: {habitat_used} • <strong>Localizzazione</strong>: {elev}m, pendenza {slope}°, esposizione {aspect}</p>")
     
-    profile = SPECIES_PROFILES_V25.get(species, SPECIES_PROFILES_V25["reticulatus"])
+    profile = species_profile # USA LA VARIABILE PASSATA
     season_text = f"{profile['season']['start_m']:02d}→{profile['season']['end_m']:02d}"
     lines.append(f"<p><strong>Ecologia specie</strong>: Stagione {season_text} • Lag biologico base ~{profile['lag_base']:.1f} giorni • VPD sensibilità {profile['vpd_sens']:.1f}</p>")
     
@@ -1169,7 +1168,7 @@ def build_analysis_super_advanced_v25(payload: Dict[str, Any]) -> str:
     else:
         lines.append("<p class='return-advice'><strong>⏸️ Strategia ATTESA</strong>: Condizioni attuali sfavorevoli. Monitora le previsioni per miglioramenti nei prossimi giorni.</p>")
     
-    lines.append(f"<h4>✨ Innovazioni Modello v2.5.4</h4>")
+    lines.append(f"<h4>✨ Innovazioni Modello v2.5.5</h4>")
     lines.append("<div style='background:#0a0f14;padding:12px;border-radius:8px;border-left:3px solid #62d5b4'>")
     lines.append("<ul style='margin:0;padding-left:20px'>")
     lines.append("<li><strong>Lag biologico dinamico</strong>: Modellazione basata su Boddy et al. (2014) con correzioni SMI, shock termico e VPD</li>")
@@ -1202,7 +1201,7 @@ async def health():
     return {
         "ok": True, 
         "time": datetime.now(timezone.utc).isoformat(), 
-        "version": "2.5.4",
+        "version": "2.5.5",
         "model": "super_advanced",
         "capabilities": capabilities,
         "features": [
@@ -1280,7 +1279,7 @@ async def report_sighting(
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ''', (lat, lon, date, species, quantity, size_cm_avg, size_cm_max, confidence,
               photo_url, notes, habitat_observed, weather_conditions, user_experience_level,
-              geohash, "2.5.4"))
+              geohash, "2.5.5"))
         
         conn.commit()
         conn.close()
@@ -1311,7 +1310,7 @@ async def report_no_findings(
              weather_conditions, notes, search_thoroughness, geohash, model_version)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ''', (lat, lon, date, searched_hours, search_method, habitat_searched,
-              weather_conditions, notes, search_thoroughness, geohash, "2.5.4"))
+              weather_conditions, notes, search_thoroughness, geohash, "2.5.5"))
         
         conn.commit()
         conn.close()
@@ -1383,7 +1382,7 @@ async def validation_stats_super_advanced():
                 "sud_italia": geo_dist[2] or 0
             },
             "ready_for_ml": total_validations >= 100,
-            "model_version": "2.5.4",
+            "model_version": "2.5.5",
             "capabilities": {
                 "numpy": NUMPY_AVAILABLE,
                 "scipy": SCIPY_AVAILABLE,
@@ -1406,7 +1405,7 @@ async def api_score_super_advanced(
     background_tasks: BackgroundTasks = None
 ):
     """
-    🚀 ENDPOINT PRINCIPALE SUPER AVANZATO v2.5.4
+    🚀 ENDPOINT PRINCIPALE SUPER AVANZATO v2.5.5
     Mantiene TUTTE le funzionalità scientifiche avanzate
     """
     start_time = time.time()
@@ -1666,13 +1665,6 @@ async def api_score_super_advanced(
             "habitat_confidence": round(habitat_confidence, 3),
             "auto_habitat_scores": auto_scores,
             "species": species,
-            "species_profile": {
-                "season_range": f"{profile['season']['start_m']:02d}-{profile['season']['end_m']:02d}",
-                "temp_optimal": f"{profile['tm7_opt'][0]:.1f}-{profile['tm7_opt'][1]:.1f}°C",
-                "lag_base_days": species_profile["lag_base"],
-                "vpd_sensitivity": species_profile["vpd_sens"],
-                "drought_tolerance": species_profile["drought_tolerance"]
-            },
             
             "flush_events": flush_events_details,
             "total_events_detected": len(rain_events),
@@ -1686,7 +1678,7 @@ async def api_score_super_advanced(
             "validation_count": validation_count,
             "validation_accuracy": round(validation_accuracy, 2),
             
-            "model_version": "2.5.4",
+            "model_version": "2.5.5",
             "model_type": "super_advanced",
             "processing_time_ms": processing_time,
             "timestamp": datetime.now(timezone.utc).isoformat(),
@@ -1709,7 +1701,8 @@ async def api_score_super_advanced(
             }
         }
         
-        response_payload["dynamic_explanation"] = build_analysis_super_advanced_v25(response_payload)
+        # FIX: Passare species_profile alla funzione di costruzione della spiegazione
+        response_payload["dynamic_explanation"] = build_analysis_super_advanced_v25(response_payload, species_profile)
         
         # Save prediction for ML
         if background_tasks:
@@ -1724,7 +1717,6 @@ async def api_score_super_advanced(
                 "species": species, "events_count": len(rain_events)
             }
             
-        
         background_tasks.add_task(
             save_prediction_super_advanced,
             lat, lon, datetime.now().date().isoformat(),
@@ -1747,5 +1739,3 @@ async def api_score_super_advanced(
 
         # risposta JSON coerente col resto dell’API
         raise HTTPException(status_code=500, detail=str(e))
-     
-
