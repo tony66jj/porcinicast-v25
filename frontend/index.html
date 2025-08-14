@@ -3,10 +3,13 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Trova Porcini – Analisi v2.5.5</title>
+  <title>Trova Porcini — Analisi v2.5.5</title>
   
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+  
+  <!-- FIX: Chart.js PRIMA di tutto il resto -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.min.js"></script>
   
   <style>
     :root{
@@ -122,6 +125,18 @@
     .loading{opacity:0.6;pointer-events:none}
     .hidden{display:none}
     
+    /* FIX: Stili aggiuntivi per debugging */
+    .error-debug {
+      background: #2d1b1b;
+      border: 1px solid #ff6b6b;
+      color: #ffb9b9;
+      padding: 12px;
+      border-radius: 8px;
+      margin: 8px 0;
+      font-family: monospace;
+      font-size: 12px;
+    }
+    
     @media (max-width: 768px) {
       .controls{grid-template-columns:1fr;gap:8px}
       .grid.g3{grid-template-columns:1fr}
@@ -168,7 +183,7 @@
           </select>
         </div>
         <div style="display:flex;gap:8px;">
-          <button id="btnGeo" class="btn" title="Cerca">🔎 Cerca</button>
+          <button id="btnGeo" class="btn" title="Cerca">🔍 Cerca</button>
           <button id="btnRun" class="btn" title="Analizza">📈 Analizza</button>
         </div>
       </div>
@@ -237,6 +252,9 @@
         ✨ <strong>v2.5:</strong> Lag biologico basato su Boddy et al. (2014) • Soglie adattive • Confidence 5D • Savitzky-Golay
       </div>
       <canvas id="chart"></canvas>
+      <div id="chart-error" style="display:none;" class="error-debug">
+        Errore nel caricamento del grafico. Verifica la console per dettagli.
+      </div>
     </div>
 
     <div class="panel section">
@@ -292,7 +310,7 @@
           </div>
           <div class="input-group">
             <input type="text" id="sighting-notes" placeholder="Note aggiuntive (opzionale)">
-            <button id="btn-report-sighting" class="btn success">📍 Segnala</button>
+            <button id="btn-report-sighting" class="btn success">📝 Segnala</button>
           </div>
         </div>
         
@@ -310,7 +328,7 @@
           <div class="input-group">
             <input type="text" id="no-find-habitat" placeholder="Habitat cercato">
             <input type="text" id="no-find-notes" placeholder="Note (condizioni, meteo, ecc.)">
-            <button id="btn-report-no-finding" class="btn secondary">🔍 Segnala</button>
+            <button id="btn-report-no-finding" class="btn secondary">📝 Segnala</button>
           </div>
         </div>
       </div>
@@ -335,16 +353,29 @@
 
   <div id="notification" class="notification"></div>
 
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.min.js"></script>
-
   <script>
     // === CONFIGURAZIONE ===
     const API_BASE = window.location.hostname === 'localhost' ? 'http://localhost:8787' : '';
     
     let currentChart = null;
     let currentLocation = { lat: null, lon: null };
-    let map = null; // Variabile per la mappa
-    let mapMarker = null; // Variabile per il marker sulla mappa
+    let map = null;
+    let mapMarker = null;
+
+    // FIX: Debug function
+    function debugLog(message, data = null) {
+      console.log(`[DEBUG] ${message}`, data);
+    }
+
+    // FIX: Verificare che Chart.js sia caricato
+    function checkChartJS() {
+      if (typeof Chart === 'undefined') {
+        console.error('Chart.js non è caricato!');
+        document.getElementById('chart-error').style.display = 'block';
+        return false;
+      }
+      return true;
+    }
 
     // === UTILITIES ===
     function showNotification(message, type = 'success') {
@@ -362,10 +393,15 @@
 
     function formatDate(dateStr) {
       try {
+        // FIX: Gestione più robusta delle date
+        if (dateStr.includes('+') || dateStr.includes('d')) {
+          return dateStr; // Restituisce formato "+Xd" così com'è
+        }
         return new Date(dateStr).toLocaleDateString('it-IT', { 
           month: 'short', day: 'numeric' 
         });
-      } catch {
+      } catch (error) {
+        debugLog('Errore formato data:', error);
         return dateStr;
       }
     }
@@ -373,9 +409,12 @@
     // === API CALLS ===
     async function geocodeLocation(query) {
       try {
+        debugLog('Geocoding:', query);
         const response = await fetch(`${API_BASE}/api/geocode?q=${encodeURIComponent(query)}`);
         if (!response.ok) throw new Error('Geocoding fallito');
-        return await response.json();
+        const result = await response.json();
+        debugLog('Geocoding result:', result);
+        return result;
       } catch (error) {
         throw new Error(`Errore geocoding: ${error.message}`);
       }
@@ -383,6 +422,7 @@
 
     async function getAnalysis(lat, lon, habitat = '', hours = 4) {
       try {
+        debugLog('Starting analysis:', { lat, lon, habitat, hours });
         const params = new URLSearchParams({
           lat: lat.toString(),
           lon: lon.toString(),
@@ -396,14 +436,18 @@
             const errData = await response.json().catch(() => ({ detail: 'Errore generico' }));
             throw new Error(`HTTP ${response.status}: ${errData.detail || 'Errore sconosciuto'}`);
         }
-        return await response.json();
+        const result = await response.json();
+        debugLog('Analysis result:', result);
+        return result;
       } catch (error) {
+        debugLog('Analysis error:', error);
         throw new Error(`Errore analisi: ${error.message}`);
       }
     }
 
     async function reportSighting(data) {
       try {
+        debugLog('Reporting sighting:', data);
         const response = await fetch(`${API_BASE}/api/report-sighting`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -418,6 +462,7 @@
 
     async function reportNoFinding(data) {
       try {
+        debugLog('Reporting no finding:', data);
         const response = await fetch(`${API_BASE}/api/report-no-findings`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -443,122 +488,207 @@
 
     // === UI UPDATES ===
     function updateKPIs(data) {
-      document.getElementById('k-index').textContent = `${data.index}/100`;
+      debugLog('Updating KPIs:', data);
       
-      const bestWindow = data.best_window;
-      if (bestWindow && bestWindow.mean > 0) {
-        document.getElementById('k-window').textContent = `Giorni ${bestWindow.start + 1}-${bestWindow.end + 1}`;
-      } else {
-        document.getElementById('k-window').textContent = 'Nessuna';
+      try {
+        document.getElementById('k-index').textContent = `${data.index}/100`;
+        
+        const bestWindow = data.best_window;
+        if (bestWindow && bestWindow.mean > 0) {
+          document.getElementById('k-window').textContent = `Giorni ${bestWindow.start + 1}-${bestWindow.end + 1}`;
+        } else {
+          document.getElementById('k-window').textContent = 'Nessuna';
+        }
+
+        const conf = data.confidence_detailed;
+        if (conf) {
+          document.getElementById('conf-met').textContent = conf.meteorological?.toFixed(2) || '—';
+          document.getElementById('conf-eco').textContent = conf.ecological?.toFixed(2) || '—';
+          document.getElementById('conf-hydro').textContent = conf.hydrological?.toFixed(2) || '—';
+          document.getElementById('conf-atmo').textContent = conf.atmospheric?.toFixed(2) || '—';
+          document.getElementById('conf-emp').textContent = conf.empirical?.toFixed(2) || '—';
+          document.getElementById('conf-overall').textContent = conf.overall?.toFixed(2) || '—';
+        }
+
+        document.getElementById('k-harvest').textContent = data.harvest_estimate || '—';
+        document.getElementById('k-harvest-note').textContent = data.harvest_note || '';
+        document.getElementById('k-size').textContent = data.size_cm ? `${data.size_cm} cm` : '—';
+        document.getElementById('k-size-range').textContent = data.size_range_cm ? 
+          `${data.size_range_cm[0]}-${data.size_range_cm[1]} cm` : '—';
+
+        const hasValidations = data.has_local_validations ? 'Sì' : 'No';
+        document.getElementById('k-has-validations').textContent = `validazioni: ${hasValidations}`;
+        
+        debugLog('KPIs updated successfully');
+      } catch (error) {
+        debugLog('Error updating KPIs:', error);
+        showNotification('Errore aggiornamento KPI', 'error');
       }
-
-      const conf = data.confidence_detailed;
-      if (conf) {
-        document.getElementById('conf-met').textContent = conf.meteorological?.toFixed(2) || '—';
-        document.getElementById('conf-eco').textContent = conf.ecological?.toFixed(2) || '—';
-        document.getElementById('conf-hydro').textContent = conf.hydrological?.toFixed(2) || '—';
-        document.getElementById('conf-atmo').textContent = conf.atmospheric?.toFixed(2) || '—';
-        document.getElementById('conf-emp').textContent = conf.empirical?.toFixed(2) || '—';
-        document.getElementById('conf-overall').textContent = conf.overall?.toFixed(2) || '—';
-      }
-
-      document.getElementById('k-harvest').textContent = data.harvest_estimate || '—';
-      document.getElementById('k-harvest-note').textContent = data.harvest_note || '';
-      document.getElementById('k-size').textContent = data.size_cm ? `${data.size_cm} cm` : '—';
-      document.getElementById('k-size-range').textContent = data.size_range_cm ? 
-        `${data.size_range_cm[0]}-${data.size_range_cm[1]} cm` : '—';
-
-      const hasValidations = data.has_local_validations ? 'Sì' : 'No';
-      document.getElementById('k-has-validations').textContent = `validazioni: ${hasValidations}`;
     }
 
     function updateChart(forecast) {
-      const ctx = document.getElementById('chart').getContext('2d');
-      if (currentChart) currentChart.destroy();
-      const labels = forecast.map((_, i) => `Giorno ${i + 1}`);
-      currentChart = new Chart(ctx, {
-        type: 'line',
-        data: {
-          labels: labels,
-          datasets: [{
-            label: 'Indice Fruttificazione',
-            data: forecast,
-            borderColor: '#62d5b4',
-            backgroundColor: 'rgba(98, 213, 180, 0.1)',
-            borderWidth: 3,
-            fill: true,
-            tension: 0.4,
-            pointBackgroundColor: '#62d5b4',
-            pointBorderColor: '#ffffff',
-            pointBorderWidth: 2,
-            pointRadius: 6
-          }]
-        },
-        options: {
-          responsive: true,
-          maintainAspectRatio: false,
-          plugins: { legend: { display: false } },
-          scales: {
-            y: { beginAtZero: true, max: 100, grid: { color: 'rgba(255,255,255,0.1)' }, ticks: { color: '#8aa0b6' } },
-            x: { grid: { color: 'rgba(255,255,255,0.1)' }, ticks: { color: '#8aa0b6' } }
-          },
-          elements: { point: { hoverRadius: 8 } }
+      debugLog('Updating chart with forecast:', forecast);
+      
+      if (!checkChartJS()) {
+        return;
+      }
+      
+      try {
+        // FIX: Verifica che forecast sia un array valido
+        if (!Array.isArray(forecast) || forecast.length === 0) {
+          debugLog('Forecast non valido:', forecast);
+          document.getElementById('chart-error').style.display = 'block';
+          document.getElementById('chart-error').textContent = 'Dati previsione non disponibili';
+          return;
         }
-      });
+        
+        const ctx = document.getElementById('chart');
+        if (!ctx) {
+          debugLog('Canvas chart non trovato');
+          return;
+        }
+        
+        const context = ctx.getContext('2d');
+        if (currentChart) {
+          currentChart.destroy();
+          currentChart = null;
+        }
+        
+        const labels = forecast.map((_, i) => `Giorno ${i + 1}`);
+        
+        currentChart = new Chart(context, {
+          type: 'line',
+          data: {
+            labels: labels,
+            datasets: [{
+              label: 'Indice Fruttificazione',
+              data: forecast,
+              borderColor: '#62d5b4',
+              backgroundColor: 'rgba(98, 213, 180, 0.1)',
+              borderWidth: 3,
+              fill: true,
+              tension: 0.4,
+              pointBackgroundColor: '#62d5b4',
+              pointBorderColor: '#ffffff',
+              pointBorderWidth: 2,
+              pointRadius: 6
+            }]
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: { 
+              legend: { display: false }
+            },
+            scales: {
+              y: { 
+                beginAtZero: true, 
+                max: 100, 
+                grid: { color: 'rgba(255,255,255,0.1)' }, 
+                ticks: { color: '#8aa0b6' } 
+              },
+              x: { 
+                grid: { color: 'rgba(255,255,255,0.1)' }, 
+                ticks: { color: '#8aa0b6' } 
+              }
+            },
+            elements: { 
+              point: { hoverRadius: 8 } 
+            }
+          }
+        });
+        
+        // Nascondi messaggio errore se grafico creato con successo
+        document.getElementById('chart-error').style.display = 'none';
+        debugLog('Chart created successfully');
+        
+      } catch (error) {
+        debugLog('Error creating chart:', error);
+        document.getElementById('chart-error').style.display = 'block';
+        document.getElementById('chart-error').textContent = `Errore grafico: ${error.message}`;
+      }
     }
 
     function updateRainTables(data) {
-      const pastTable = document.getElementById('rain-past-table');
-      if (data.rain_past && Object.keys(data.rain_past).length > 0) {
-        let html = '<table><tr><th>Data</th><th>Pioggia (mm)</th></tr>';
-        Object.entries(data.rain_past).reverse().slice(0, 7).forEach(([date, mm]) => {
-          html += `<tr><td>${formatDate(date)}</td><td>${mm}</td></tr>`;
-        });
-        html += '</table>';
-        pastTable.innerHTML = html;
-      } else {
-        pastTable.innerHTML = '<p class="muted">Dati non disponibili</p>';
-      }
+      debugLog('Updating rain tables:', { 
+        past: data.rain_past, 
+        future: data.rain_future 
+      });
+      
+      try {
+        const pastTable = document.getElementById('rain-past-table');
+        if (data.rain_past && Object.keys(data.rain_past).length > 0) {
+          let html = '<table><tr><th>Data</th><th>Pioggia (mm)</th></tr>';
+          Object.entries(data.rain_past).reverse().slice(0, 7).forEach(([date, mm]) => {
+            html += `<tr><td>${formatDate(date)}</td><td>${mm}</td></tr>`;
+          });
+          html += '</table>';
+          pastTable.innerHTML = html;
+        } else {
+          pastTable.innerHTML = '<p class="muted">Dati passati non disponibili</p>';
+        }
 
-      const futureTable = document.getElementById('rain-future-table');
-      if (data.rain_future && Object.keys(data.rain_future).length > 0) {
-        let html = '<table><tr><th>Data</th><th>Pioggia (mm)</th></tr>';
-        Object.entries(data.rain_future).forEach(([date, mm]) => {
-          html += `<tr><td>${formatDate(date)}</td><td>${mm}</td></tr>`;
-        });
-        html += '</table>';
-        futureTable.innerHTML = html;
-      } else {
-        futureTable.innerHTML = '<p class="muted">Dati non disponibili</p>';
+        const futureTable = document.getElementById('rain-future-table');
+        if (data.rain_future && Object.keys(data.rain_future).length > 0) {
+          let html = '<table><tr><th>Data</th><th>Pioggia (mm)</th></tr>';
+          Object.entries(data.rain_future).forEach(([date, mm]) => {
+            html += `<tr><td>${formatDate(date)}</td><td>${mm}</td></tr>`;
+          });
+          html += '</table>';
+          futureTable.innerHTML = html;
+        } else {
+          futureTable.innerHTML = '<p class="muted">Dati futuri non disponibili</p>';
+        }
+        
+        debugLog('Rain tables updated successfully');
+      } catch (error) {
+        debugLog('Error updating rain tables:', error);
       }
     }
 
     function updateFlushEvents(data) {
-      const eventsDiv = document.getElementById('flush-events');
-      if (data.flush_events && data.flush_events.length > 0) {
-        let html = '<ul>';
-        data.flush_events.slice(0, 5).forEach(event => {
-          const obsText = event.observed ? '📊 Osservato' : '🔮 Previsto';
-          html += `<li><strong>${event.event_when}</strong>: ${event.event_mm}mm → flush ~${event.lag_days} giorni (${obsText})</li>`;
-        });
-        html += '</ul>';
-        eventsDiv.innerHTML = html;
-      } else {
-        eventsDiv.innerHTML = '<p class="muted">Nessun evento significativo rilevato</p>';
+      debugLog('Updating flush events:', data.flush_events);
+      
+      try {
+        const eventsDiv = document.getElementById('flush-events');
+        if (data.flush_events && Array.isArray(data.flush_events) && data.flush_events.length > 0) {
+          let html = '<ul>';
+          data.flush_events.slice(0, 5).forEach(event => {
+            const obsText = event.observed ? '📊 Osservato' : '🔮 Previsto';
+            html += `<li><strong>${event.event_when}</strong>: ${event.event_mm}mm → flush ~${event.lag_days} giorni (${obsText})</li>`;
+          });
+          html += '</ul>';
+          eventsDiv.innerHTML = html;
+        } else {
+          eventsDiv.innerHTML = '<p class="muted">Nessun evento significativo rilevato</p>';
+        }
+        
+        debugLog('Flush events updated successfully');
+      } catch (error) {
+        debugLog('Error updating flush events:', error);
       }
     }
 
     function updateFieldAnalysis(data) {
-      const analysisDiv = document.getElementById('field-analysis');
-      if (data.dynamic_explanation) {
-        analysisDiv.innerHTML = data.dynamic_explanation;
-      } else {
-        analysisDiv.innerHTML = '<p class="muted">Analisi dettagliata non disponibile</p>';
+      debugLog('Updating field analysis:', !!data.dynamic_explanation);
+      
+      try {
+        const analysisDiv = document.getElementById('field-analysis');
+        if (data.dynamic_explanation && data.dynamic_explanation.trim() !== '') {
+          analysisDiv.innerHTML = data.dynamic_explanation;
+        } else {
+          analysisDiv.innerHTML = '<p class="muted">Analisi dettagliata non disponibile per questa località</p>';
+        }
+        
+        debugLog('Field analysis updated successfully');
+      } catch (error) {
+        debugLog('Error updating field analysis:', error);
       }
     }
 
     async function updateValidationStats() {
       try {
+        debugLog('Fetching validation stats...');
         const stats = await getValidationStats();
         const statsDiv = document.getElementById('validation-stats');
         
@@ -573,8 +703,10 @@
           <div class="stat-item"><div class="stat-value">${stats.predictions_logged || 0}</div><div class="stat-label">Predizioni totali</div></div>
           <div class="stat-item"><div class="stat-value">${stats.avg_confidence || 0}</div><div class="stat-label">Accuratezza media</div></div>
         `;
+        
+        debugLog('Validation stats updated successfully');
       } catch (error) {
-        console.warn('Errore aggiornamento stats:', error);
+        debugLog('Error updating validation stats:', error);
       }
     }
 
@@ -610,6 +742,7 @@
         setLoading(true);
 
         try {
+            // FIX: Geocoding automatico se coordinate non valide
             if ((!lat || !lon || isNaN(lat) || isNaN(lon)) && query) {
                 showNotification('Coordinate non valide, uso la località testuale...', 'warn');
                 const geoResult = await geocodeLocation(query);
@@ -631,17 +764,29 @@
             const habitat = document.getElementById('habitat').value;
             const hours = parseInt(document.getElementById('hours').value);
 
+            debugLog('Starting analysis with:', { lat, lon, habitat, hours });
             const data = await getAnalysis(lat, lon, habitat, hours);
             
+            // FIX: Aggiornamenti più robusti
             updateKPIs(data);
-            updateChart(data.forecast || []);
+            
+            // FIX: Verifica esplicita della presenza del forecast
+            if (data.forecast && Array.isArray(data.forecast)) {
+              updateChart(data.forecast);
+            } else {
+              debugLog('Forecast mancante o non valido:', data.forecast);
+              document.getElementById('chart-error').style.display = 'block';
+              document.getElementById('chart-error').textContent = 'Dati previsione non ricevuti dal server';
+            }
+            
             updateRainTables(data);
             updateFlushEvents(data);
             updateFieldAnalysis(data);
             
-            showNotification(`Analisi completata: ${data.index}/100 per ${data.species}`);
+            showNotification(`Analisi completata: ${data.index}/100 per ${data.species || 'specie sconosciuta'}`);
 
         } catch (error) {
+            debugLog('Analysis failed:', error);
             showNotification(error.message, 'error');
         } finally {
             setLoading(false);
@@ -706,29 +851,43 @@
       }
     }
     
-    // === INIZIALIZZAZIONE MAPPA E EVENTI ===
+    // === INIZIALIZZAZIONE ===
     document.addEventListener('DOMContentLoaded', function() {
-      // Inizializzazione Mappa Leaflet
-      map = L.map('map').setView([42.5, 12.5], 6); // Centro su Italia
-      L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
-        attribution: 'Tiles &copy; Esri &mdash; Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, and the GIS User Community'
-      }).addTo(map);
+      debugLog('DOM loaded, initializing...');
+      
+      // FIX: Verifica che Chart.js sia disponibile
+      if (!checkChartJS()) {
+        showNotification('Errore: Chart.js non caricato correttamente', 'error');
+      }
+      
+      try {
+        // Inizializzazione Mappa Leaflet
+        map = L.map('map').setView([42.5, 12.5], 6);
+        L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+          attribution: 'Tiles &copy; Esri &mdash; Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, and the GIS User Community'
+        }).addTo(map);
 
-      // Event listener per il click sulla mappa
-      map.on('click', function(e) {
-        const { lat, lng } = e.latlng;
-        document.getElementById('lat').value = lat.toFixed(4);
-        document.getElementById('lon').value = lng.toFixed(4);
+        // Event listener per il click sulla mappa
+        map.on('click', function(e) {
+          const { lat, lng } = e.latlng;
+          document.getElementById('lat').value = lat.toFixed(4);
+          document.getElementById('lon').value = lng.toFixed(4);
+          
+          if (mapMarker) {
+            mapMarker.setLatLng(e.latlng);
+          } else {
+            mapMarker = L.marker(e.latlng).addTo(map);
+          }
+          
+          showNotification('Coordinate selezionate. Avvio analisi...', 'success');
+          handleAnalysis();
+        });
         
-        if (mapMarker) {
-          mapMarker.setLatLng(e.latlng);
-        } else {
-          mapMarker = L.marker(e.latlng).addTo(map);
-        }
-        
-        showNotification('Coordinate selezionate. Avvio analisi...', 'success');
-        handleAnalysis(); // Avvia l'analisi automaticamente
-      });
+        debugLog('Map initialized successfully');
+      } catch (error) {
+        debugLog('Error initializing map:', error);
+        showNotification('Errore inizializzazione mappa', 'error');
+      }
       
       // Event listeners per i bottoni
       document.getElementById('btnGeo').addEventListener('click', handleGeocode);
@@ -740,10 +899,14 @@
         if (e.key === 'Enter') handleGeocode();
       });
 
-      updateValidationStats();
-
+      // FIX: Inizializzazione con coordinate di default
       document.getElementById('lat').value = '43.3188';
       document.getElementById('lon').value = '11.3307';
+      
+      // Carica statistiche validazione
+      updateValidationStats();
+      
+      debugLog('Initialization completed');
     });
   </script>
 </body>
