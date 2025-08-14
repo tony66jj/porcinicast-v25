@@ -1,4 +1,3 @@
-
   @app.get("/api/score")
 async def api_score_hybrid_weather(
     lat: float = Query(..., description="Latitudine"),
@@ -2444,3 +2443,5 @@ async def api_score_scientifically_corrected(
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8787)
+
+
