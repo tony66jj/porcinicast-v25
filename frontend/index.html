@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>PorciniCast v2.5.6 — Analisi Scientificamente Corretta</title>
+  <title>PorciniCast v2.5.7 — Sistema Meteorologico Ibrido</title>
   
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
   
@@ -179,10 +179,10 @@
 <body>
   <div class="wrap">
     <header>
-      <h1>🍄 PorciniCast — Analisi Scientificamente Corretta</h1>
-      <span class="badge version-badge">v2.5.6</span>
-      <span class="badge scientific-badge">Lag Specie-Specifico</span>
-      <span class="badge">Umidità Cumulativa</span>
+      <h1>🍄 PorciniCast — Sistema Meteorologico Ibrido</h1>
+      <span class="badge version-badge">v2.5.7</span>
+      <span class="badge scientific-badge">Visual Crossing + Open-Meteo</span>
+      <span class="badge">Dati Completi 15 Giorni</span>
     </header>
 
     <div class="panel">
@@ -322,8 +322,8 @@
           <p class="muted">In attesa di analisi...</p>
         </div>
         <div id="cumulative-moisture-info" style="margin-top:12px;">
-          <h4>🌊 Indice Umidità Cumulativa</h4>
-          <div id="cumulative-moisture-value" class="muted">In attesa di calcolo...</div>
+          <h4>🌊 Sistema Meteorologico Ibrido</h4>
+          <div id="cumulative-moisture-value" class="muted">In attesa di calcolo qualità weather...</div>
         </div>
       </div>
     </div>
@@ -385,8 +385,8 @@
     </div>
 
     <footer>
-      <p>🍄 <strong>PorciniCast v2.5.6</strong> — Modello fenologico scientificamente corretto per previsione fruttificazione <em>Boletus</em> spp.</p>
-      <p>Innovazioni: Lag biologico specie-specifico • Umidità cumulativa • Esposizione corretta • Step-function fruttificazione</p>
+      <p>🍄 <strong>PorciniCast v2.5.7</strong> — Sistema meteorologico ibrido per previsione fruttificazione <em>Boletus</em> spp.</p>
+      <p>Innovazioni: Visual Crossing + Open-Meteo • Lag biologico specie-specifico • Umidità cumulativa • Step-function fruttificazione</p>
       <p>Basato su letteratura peer-reviewed: Viitanen (1997), Frontiers Soil Science (2023), ScienceDirect (2017)</p>
       <p><strong>Sviluppato da Antonio Pio D'Aloia</strong> • FastAPI • NumPy/SciPy • SQLite • Docker • Crowd-sourcing ML-ready • Mappa Interattiva Leaflet.js</p>
     </footer>
@@ -582,8 +582,24 @@
         const hasValidations = data.has_local_validations ? 'Sì' : 'No';
         document.getElementById('k-has-validations').textContent = `validazioni: ${hasValidations}`;
         
-        // NUOVO: Mostra umidità cumulativa se disponibile
-        if (data.cumulative_moisture_index !== undefined) {
+        // NUOVO: Mostra qualità e fonti weather se disponibili
+        if (data.weather_quality_score !== undefined) {
+          const qualityDiv = document.getElementById('cumulative-moisture-value');
+          if (qualityDiv) {
+            const weatherSources = data.weather_sources || {};
+            const vcDays = weatherSources.visual_crossing_days || 0;
+            const omDays = weatherSources.open_meteo_past_days || 0;
+            const qualityColor = data.weather_quality_score >= 0.8 ? '#66e28a' : data.weather_quality_score >= 0.6 ? '#ffc857' : '#ff6b6b';
+            
+            qualityDiv.innerHTML = `
+              <strong>Qualità Weather:</strong> <span style="color:${qualityColor}">${data.weather_quality_score.toFixed(2)}</span>/1.00<br>
+              <strong>Fonti:</strong> Visual Crossing (${vcDays}d) + Open-Meteo (${omDays}d)<br>
+              <strong>Umidità Cumulativa:</strong> ${data.cumulative_moisture_index.toFixed(1)} mm
+            `;
+            qualityDiv.className = data.weather_quality_score >= 0.8 ? 'chip ok' : data.weather_quality_score >= 0.6 ? 'chip warn' : 'chip bad';
+          }
+        } else if (data.cumulative_moisture_index !== undefined) {
+          // Fallback per retrocompatibilità
           const cmiDiv = document.getElementById('cumulative-moisture-value');
           if (cmiDiv) {
             cmiDiv.innerHTML = `<strong>Indice attuale:</strong> ${data.cumulative_moisture_index.toFixed(1)} mm (finestra 14 giorni con peso decrescente)`;
@@ -999,8 +1015,9 @@
             
             const improvements = data.diagnostics?.scientific_improvements || {};
             const improvementsList = Object.entries(improvements).filter(([k,v]) => v).map(([k,v]) => k).join(', ');
+            const weatherSources = data.weather_sources ? Object.keys(data.weather_sources).join(', ') : 'unknown';
             
-            showNotification(`✅ Analisi scientifica completata: ${data.index}/100 per ${data.species || 'specie sconosciuta'} (${improvementsList})`);
+            showNotification(`✅ Analisi ibrida completata: ${data.index}/100 per ${data.species || 'specie sconosciuta'} (fonti: ${weatherSources})`);
 
         } catch (error) {
             debugLog('❌ Scientific analysis failed:', error);
