@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Trova Porcini — Analisi v2.5.5</title>
+  <title>PorciniCast v2.5.6 — Analisi Scientificamente Corretta</title>
   
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
   
@@ -47,9 +47,9 @@
     .hr{height:1px;background:linear-gradient(90deg,transparent,#253244,transparent);margin:12px 0}
     #chart{
       width:100%;
-      height:140px;
+      height:160px;
       max-width:100%;
-      max-height:140px;
+      max-height:160px;
       border-radius:12px;
       background:linear-gradient(180deg,#0c1015,#0b0f14);
       border:1px solid #1e2937;
@@ -155,6 +155,15 @@
       color: #b9f3cf;
     }
     
+    .scientific-badge {
+      background: linear-gradient(45deg, #ff6b6b, #4ecdc4);
+      color: white;
+      padding: 3px 8px;
+      border-radius: 12px;
+      font-size: 11px;
+      font-weight: 600;
+    }
+    
     @media (max-width: 768px) {
       .controls{grid-template-columns:1fr;gap:8px}
       .grid.g3{grid-template-columns:1fr}
@@ -162,7 +171,7 @@
       .input-group{flex-direction:column;align-items:stretch}
       .crowdsource .grid.g2{grid-template-columns:1fr}
       #map{height:280px}
-      #chart{height:120px!important;max-height:120px!important}
+      #chart{height:140px!important;max-height:140px!important}
       .panel{overflow:hidden}
     }
   </style>
@@ -170,9 +179,10 @@
 <body>
   <div class="wrap">
     <header>
-      <h1>🍄 Trova Porcini — Analisi Scientifica Avanzata</h1>
-      <span class="badge version-badge">v2.5.5</span>
-      <span class="badge">Lag Biologico Dinamico</span>
+      <h1>🍄 PorciniCast — Analisi Scientificamente Corretta</h1>
+      <span class="badge version-badge">v2.5.6</span>
+      <span class="badge scientific-badge">Lag Specie-Specifico</span>
+      <span class="badge">Umidità Cumulativa</span>
     </header>
 
     <div class="panel">
@@ -221,7 +231,7 @@
         <div class="hr"></div>
         <div class="metric"><div class="k">Finestra migliore</div><div id="k-window" class="v">—</div></div>
         <div style="margin-top:8px;">
-          <span id="k-model-version" class="chip">v2.5.5</span>
+          <span id="k-model-version" class="chip">v2.5.6</span>
           <span id="k-has-validations" class="chip">validazioni: —</span>
         </div>
       </div>
@@ -268,15 +278,15 @@
     </div>
 
     <div class="panel section">
-      <h3>📈 Previsione Prossimi 10 Giorni (Lag Biologico Dinamico)</h3>
+      <h3>📈 Previsione Prossimi 10 Giorni (Step-Function Scientifica)</h3>
       <div style="margin-bottom:8px;color:var(--muted);font-size:12px;">
-        ✨ <strong>v2.5:</strong> Lag biologico basato su Boddy et al. (2014) • Soglie adattive • Confidence 5D • Savitzky-Golay
+        ✨ <strong>v2.5.6:</strong> Lag specie-specifico • Umidità cumulativa • Esposizione corretta • Step-function fruttificazione
       </div>
       <div class="lag-explanation" id="lag-explanation" style="display:none;">
-        💡 <strong>Lag Biologico Dinamico:</strong> Il tempo di fruttificazione varia da 6 a 14 giorni in base a umidità del suolo, shock termico, specie e stress atmosferico.
+        💡 <strong>Fruttificazione Step-Function:</strong> Basato su letteratura scientifica - i funghi appaiono improvvisamente "tutto o niente" dopo lag biologico specie-specifico.
       </div>
       <div style="width:100%;max-width:100%;overflow:hidden;position:relative;">
-        <canvas id="chart" style="width:100%!important;height:140px!important;max-width:100%!important;"></canvas>
+        <canvas id="chart" style="width:100%!important;height:160px!important;max-width:100%!important;"></canvas>
       </div>
       <div id="chart-error" style="display:none;" class="error-debug">
         Errore nel caricamento del grafico. Verifica la console per dettagli.
@@ -284,9 +294,9 @@
     </div>
 
     <div class="panel section">
-      <h3>🧭 Analisi Dettagliata e Consigli Scientifici</h3>
+      <h3>🧭 Analisi Scientifica Dettagliata v2.5.6</h3>
       <div id="field-analysis" class="field-analysis">
-        <p class="muted">Esegui un'analisi per vedere i dettagli scientifici e le raccomandazioni personalizzate.</p>
+        <p class="muted">Esegui un'analisi per vedere i dettagli scientifici con lag specie-specifico e umidità cumulativa.</p>
       </div>
     </div>
 
@@ -307,16 +317,20 @@
         </div>
       </div>
       <div style="margin-top:16px;">
-        <h4>💧 Eventi di Flush Rilevati</h4>
+        <h4>💧 Eventi di Flush con Lag Specie-Specifico</h4>
         <div id="flush-events" class="events">
           <p class="muted">In attesa di analisi...</p>
+        </div>
+        <div id="cumulative-moisture-info" style="margin-top:12px;">
+          <h4>🌊 Indice Umidità Cumulativa</h4>
+          <div id="cumulative-moisture-value" class="muted">In attesa di calcolo...</div>
         </div>
       </div>
     </div>
 
     <div class="panel section crowdsource">
       <h3>🧬 Contribuisci alla Ricerca Scientifica</h3>
-      <p style="margin-bottom:20px;color:#cfe6ff;">Aiuta a migliorare il modello fenologico condividendo le tue osservazioni sul campo. I tuoi dati vengono utilizzati per calibrare l'algoritmo di previsione.</p>
+      <p style="margin-bottom:20px;color:#cfe6ff;">Aiuta a perfezionare il modello con lag specie-specifico condividendo le tue osservazioni. I dati alimentano l'algoritmo di machine learning per migliorare la previsione della fruttificazione fungina.</p>
       
       <div class="grid g2">
         <div>
@@ -336,7 +350,7 @@
           </div>
           <div class="input-group">
             <input type="text" id="sighting-notes" placeholder="Note aggiuntive (opzionale)">
-            <button id="btn-report-sighting" class="btn success">📝 Segnala</button>
+            <button id="btn-report-sighting" class="btn success">🔬 Segnala</button>
           </div>
         </div>
         
@@ -354,13 +368,13 @@
           <div class="input-group">
             <input type="text" id="no-find-habitat" placeholder="Habitat cercato">
             <input type="text" id="no-find-notes" placeholder="Note (condizioni, meteo, ecc.)">
-            <button id="btn-report-no-finding" class="btn secondary">📝 Segnala</button>
+            <button id="btn-report-no-finding" class="btn secondary">🔬 Segnala</button>
           </div>
         </div>
       </div>
       
       <div style="margin-top:24px;">
-        <h4>📈 Statistiche Validazioni</h4>
+        <h4>📈 Statistiche Validazioni Scientifiche</h4>
         <div id="validation-stats" class="stats-grid">
           <div class="stat-item"><div class="stat-value">—</div><div class="stat-label">Segnalazioni positive</div></div>
           <div class="stat-item"><div class="stat-value">—</div><div class="stat-label">Ricerche negative</div></div>
@@ -371,8 +385,9 @@
     </div>
 
     <footer>
-      <p>🍄 <strong>PorciniCast v2.5.5</strong> — Modello fenologico scientifico per previsione fruttificazione <em>Boletus</em> spp.</p>
-      <p>Basato su letteratura peer-reviewed: Boddy & Heilmann-Clausen (2014), Büntgen et al. (2012), Kauserud et al. (2010)</p>
+      <p>🍄 <strong>PorciniCast v2.5.6</strong> — Modello fenologico scientificamente corretto per previsione fruttificazione <em>Boletus</em> spp.</p>
+      <p>Innovazioni: Lag biologico specie-specifico • Umidità cumulativa • Esposizione corretta • Step-function fruttificazione</p>
+      <p>Basato su letteratura peer-reviewed: Viitanen (1997), Frontiers Soil Science (2023), ScienceDirect (2017)</p>
       <p><strong>Sviluppato da Antonio Pio D'Aloia</strong> • FastAPI • NumPy/SciPy • SQLite • Docker • Crowd-sourcing ML-ready • Mappa Interattiva Leaflet.js</p>
     </footer>
   </div>
@@ -461,7 +476,7 @@
 
     async function getAnalysis(lat, lon, habitat = '', hours = 4) {
       try {
-        debugLog('Starting analysis:', { lat, lon, habitat, hours });
+        debugLog('Starting scientifically corrected analysis:', { lat, lon, habitat, hours });
         const params = new URLSearchParams({
           lat: lat.toString(),
           lon: lon.toString(),
@@ -476,17 +491,20 @@
             throw new Error(`HTTP ${response.status}: ${errData.detail || 'Errore sconosciuto'}`);
         }
         const result = await response.json();
-        debugLog('Analysis result structure:', {
+        debugLog('Scientifically corrected analysis result:', {
           hasIndex: !!result.index,
           hasForecast: Array.isArray(result.forecast),
           forecastLength: result.forecast?.length,
           hasFlushEvents: Array.isArray(result.flush_events),
-          eventsCount: result.flush_events?.length
+          eventsCount: result.flush_events?.length,
+          hasSpeciesLag: !!result.species,
+          hasCumulativeMoisture: !!result.cumulative_moisture_index,
+          scientificImprovements: result.diagnostics?.scientific_improvements
         });
         return result;
       } catch (error) {
-        debugLog('Analysis error:', error);
-        throw new Error(`Errore analisi: ${error.message}`);
+        debugLog('Scientific analysis error:', error);
+        throw new Error(`Errore analisi scientifica: ${error.message}`);
       }
     }
 
@@ -533,7 +551,7 @@
 
     // === UI UPDATES ===
     function updateKPIs(data) {
-      debugLog('Updating KPIs:', data);
+      debugLog('Updating KPIs scientifically corrected:', data);
       
       try {
         document.getElementById('k-index').textContent = `${data.index}/100`;
@@ -564,7 +582,16 @@
         const hasValidations = data.has_local_validations ? 'Sì' : 'No';
         document.getElementById('k-has-validations').textContent = `validazioni: ${hasValidations}`;
         
-        debugLog('KPIs updated successfully');
+        // NUOVO: Mostra umidità cumulativa se disponibile
+        if (data.cumulative_moisture_index !== undefined) {
+          const cmiDiv = document.getElementById('cumulative-moisture-value');
+          if (cmiDiv) {
+            cmiDiv.innerHTML = `<strong>Indice attuale:</strong> ${data.cumulative_moisture_index.toFixed(1)} mm (finestra 14 giorni con peso decrescente)`;
+            cmiDiv.className = data.cumulative_moisture_index > 10 ? 'chip ok' : data.cumulative_moisture_index > 5 ? 'chip warn' : 'chip bad';
+          }
+        }
+        
+        debugLog('KPIs updated successfully with scientific improvements');
       } catch (error) {
         debugLog('Error updating KPIs:', error);
         showNotification('Errore aggiornamento KPI', 'error');
@@ -572,7 +599,7 @@
     }
 
     function updateChart(forecast) {
-      debugLog('Updating chart with forecast:', forecast);
+      debugLog('Updating chart with scientifically corrected forecast:', forecast);
       
       if (!checkChartJS()) {
         return;
@@ -601,24 +628,25 @@
         
         const labels = forecast.map((_, i) => `Giorno ${i + 1}`);
         
-        // CHART.JS v3.9.1 SYNTAX - FIXED RESPONSIVE
+        // CHART.JS v3.9.1 SYNTAX - FIXED RESPONSIVE - DIMENSIONE LEGGERMENTE PIÙ GRANDE
         currentChart = new Chart(ctx, {
           type: 'line',
           data: {
             labels: labels,
             datasets: [{
-              label: 'Indice Fruttificazione',
+              label: 'Indice Fruttificazione (Step-Function)',
               data: forecast,
               borderColor: '#62d5b4',
-              backgroundColor: 'rgba(98, 213, 180, 0.1)',
-              borderWidth: 2,
+              backgroundColor: 'rgba(98, 213, 180, 0.15)',
+              borderWidth: 3,
               fill: true,
-              tension: 0.3,
+              tension: 0.2, // Ridotto per effetto step-function
               pointBackgroundColor: '#62d5b4',
               pointBorderColor: '#ffffff',
-              pointBorderWidth: 1,
-              pointRadius: 4,
-              pointHoverRadius: 6
+              pointBorderWidth: 2,
+              pointRadius: 5,
+              pointHoverRadius: 7,
+              stepped: false // Manteniamo smooth ma con tension ridotta
             }]
           },
           options: {
@@ -626,18 +654,25 @@
             maintainAspectRatio: false,
             layout: {
               padding: {
-                left: 10,
-                right: 10,
-                top: 10,
-                bottom: 10
+                left: 12,
+                right: 12,
+                top: 12,
+                bottom: 12
               }
             },
             animation: {
-              duration: 600,
+              duration: 800,
               easing: 'easeInOutQuart'
             },
             plugins: { 
-              legend: { display: false }
+              legend: { 
+                display: true,
+                position: 'top',
+                labels: {
+                  color: '#8aa0b6',
+                  font: { size: 11 }
+                }
+              }
             },
             scales: {
               y: { 
@@ -650,8 +685,8 @@
                 }, 
                 ticks: { 
                   color: '#8aa0b6', 
-                  font: { size: 10 },
-                  maxTicksLimit: 5
+                  font: { size: 11 },
+                  maxTicksLimit: 6
                 }
               },
               x: { 
@@ -661,13 +696,13 @@
                 }, 
                 ticks: { 
                   color: '#8aa0b6', 
-                  font: { size: 10 },
+                  font: { size: 11 },
                   maxRotation: 0
                 }
               }
             },
             elements: { 
-              point: { hoverRadius: 6 },
+              point: { hoverRadius: 7 },
               line: { borderJoinStyle: 'round' }
             },
             interaction: {
@@ -679,17 +714,17 @@
         
         // Nascondi messaggio errore
         document.getElementById('chart-error').style.display = 'none';
-        debugLog('✅ Chart created successfully with', forecast.length, 'data points');
+        debugLog('✅ Scientific chart created successfully with', forecast.length, 'data points');
         
       } catch (error) {
-        debugLog('❌ Error creating chart:', error);
+        debugLog('❌ Error creating scientific chart:', error);
         document.getElementById('chart-error').style.display = 'block';
         document.getElementById('chart-error').textContent = `Errore grafico: ${error.message}`;
       }
     }
 
     function updateRainTables(data) {
-      debugLog('Updating rain tables:', { 
+      debugLog('Updating rain tables scientifically corrected:', { 
         past: data.rain_past ? Object.keys(data.rain_past).length : 0, 
         future: data.rain_future ? Object.keys(data.rain_future).length : 0
       });
@@ -726,7 +761,7 @@
     }
 
     function updateFlushEvents(data) {
-      debugLog('Updating flush events:', {
+      debugLog('Updating flush events scientifically corrected:', {
         hasEvents: Array.isArray(data.flush_events),
         eventCount: data.flush_events?.length || 0
       });
@@ -736,28 +771,31 @@
         if (data.flush_events && Array.isArray(data.flush_events) && data.flush_events.length > 0) {
           let html = '<ul>';
           
-          // LAG BIOLOGICO DINAMICO FIX
+          // LAG BIOLOGICO SPECIE-SPECIFICO
           let hasVariableLag = false;
           const lagValues = [];
+          const speciesInfo = data.species || 'unknown';
           
           data.flush_events.slice(0, 5).forEach(event => {
             const obsText = event.observed ? '📊 Osservato' : '🔮 Previsto';
-            const lagDays = event.lag_days || 7; // Fallback se manca
+            const lagDays = event.lag_days || 7;
+            const strength = event.event_strength || 0;
+            const cumMoisture = event.cumulative_moisture || 0;
             lagValues.push(lagDays);
             
             if (lagDays !== 7) hasVariableLag = true;
             
-            html += `<li><strong>${event.event_when}</strong>: ${event.event_mm}mm → flush ~<strong>${lagDays} giorni</strong> (${obsText})</li>`;
+            html += `<li><strong>${event.event_when}</strong>: ${event.event_mm}mm → flush ~<strong>${lagDays} giorni</strong> (forza: ${strength.toFixed(2)}, umidità cum.: ${cumMoisture.toFixed(1)}mm) (${obsText})</li>`;
           });
           html += '</ul>';
           eventsDiv.innerHTML = html;
           
-          // Mostra spiegazione lag dinamico se presente
+          // Mostra spiegazione lag specie-specifico
           const lagExplanation = document.getElementById('lag-explanation');
           if (hasVariableLag && lagExplanation) {
             const minLag = Math.min(...lagValues);
             const maxLag = Math.max(...lagValues);
-            lagExplanation.innerHTML = `💡 <strong>Lag Biologico Dinamico:</strong> Rilevato range ${minLag}-${maxLag} giorni basato su condizioni locali (umidità, shock termico, specie, stress VPD).`;
+            lagExplanation.innerHTML = `💡 <strong>Lag Biologico Specie-Specifico:</strong> Range ${minLag}-${maxLag} giorni per <em>B. ${speciesInfo}</em> basato su umidità suolo, shock termico, umidità cumulativa e stress VPD secondo letteratura scientifica.`;
             lagExplanation.style.display = 'block';
           }
           
@@ -765,14 +803,14 @@
           eventsDiv.innerHTML = '<p class="muted">Nessun evento significativo rilevato</p>';
         }
         
-        debugLog('✅ Flush events updated successfully');
+        debugLog('✅ Flush events updated successfully with species-specific lag');
       } catch (error) {
         debugLog('❌ Error updating flush events:', error);
       }
     }
 
     function updateFieldAnalysis(data) {
-      debugLog('Updating field analysis:', {
+      debugLog('Updating field analysis scientifically corrected:', {
         hasExplanation: !!data.dynamic_explanation,
         explanationLength: data.dynamic_explanation?.length || 0
       });
@@ -782,10 +820,10 @@
         if (data.dynamic_explanation && data.dynamic_explanation.trim() !== '') {
           analysisDiv.innerHTML = data.dynamic_explanation;
         } else {
-          analysisDiv.innerHTML = '<p class="muted">Analisi dettagliata non disponibile per questa località</p>';
+          analysisDiv.innerHTML = '<p class="muted">Analisi scientifica dettagliata non disponibile per questa località</p>';
         }
         
-        debugLog('✅ Field analysis updated successfully');
+        debugLog('✅ Field analysis updated successfully with scientific corrections');
       } catch (error) {
         debugLog('❌ Error updating field analysis:', error);
       }
@@ -802,11 +840,13 @@
           return;
         }
 
+        const readyForML = stats.ready_for_ml ? '✅' : '⏳';
+        
         statsDiv.innerHTML = `
           <div class="stat-item"><div class="stat-value">${stats.positive_sightings || 0}</div><div class="stat-label">Segnalazioni positive</div></div>
           <div class="stat-item"><div class="stat-value">${stats.negative_reports || 0}</div><div class="stat-label">Ricerche negative</div></div>
           <div class="stat-item"><div class="stat-value">${stats.predictions_logged || 0}</div><div class="stat-label">Predizioni totali</div></div>
-          <div class="stat-item"><div class="stat-value">${stats.avg_confidence || 0}</div><div class="stat-label">Accuratezza media</div></div>
+          <div class="stat-item"><div class="stat-value">${readyForML}</div><div class="stat-label">Ready for ML</div></div>
         `;
         
         debugLog('✅ Validation stats updated successfully');
@@ -869,7 +909,7 @@
             const habitat = document.getElementById('habitat').value;
             const hours = parseInt(document.getElementById('hours').value);
 
-            debugLog('🚀 Starting analysis with:', { lat, lon, habitat, hours });
+            debugLog('🚀 Starting scientifically corrected analysis with:', { lat, lon, habitat, hours });
             const data = await getAnalysis(lat, lon, habitat, hours);
             
             // Aggiornamenti UI
@@ -888,10 +928,13 @@
             updateFlushEvents(data);
             updateFieldAnalysis(data);
             
-            showNotification(`✅ Analisi completata: ${data.index}/100 per ${data.species || 'specie sconosciuta'}`);
+            const improvements = data.diagnostics?.scientific_improvements || {};
+            const improvementsList = Object.entries(improvements).filter(([k,v]) => v).map(([k,v]) => k).join(', ');
+            
+            showNotification(`✅ Analisi scientifica completata: ${data.index}/100 per ${data.species || 'specie sconosciuta'} (${improvementsList})`);
 
         } catch (error) {
-            debugLog('❌ Analysis failed:', error);
+            debugLog('❌ Scientific analysis failed:', error);
             showNotification(error.message, 'error');
         } finally {
             setLoading(false);
@@ -915,7 +958,7 @@
       setLoading(true);
       try {
         await reportSighting(data);
-        showNotification('Segnalazione registrata con successo!');
+        showNotification('Segnalazione scientifica registrata con successo!');
         document.getElementById('sighting-quantity').value = '1';
         document.getElementById('sighting-size').value = '';
         document.getElementById('sighting-habitat').value = '';
@@ -944,7 +987,7 @@
       setLoading(true);
       try {
         await reportNoFinding(data);
-        showNotification('Report registrato con successo!');
+        showNotification('Report scientifico registrato con successo!');
         document.getElementById('no-find-hours').value = '2';
         document.getElementById('no-find-habitat').value = '';
         document.getElementById('no-find-notes').value = '';
@@ -958,14 +1001,14 @@
     
     // === INIZIALIZZAZIONE ===
     document.addEventListener('DOMContentLoaded', function() {
-      debugLog('🔄 DOM loaded, initializing...');
+      debugLog('🔄 DOM loaded, initializing scientifically corrected version...');
       
       // Verifica librerie
       setTimeout(() => {
         if (!checkChartJS()) {
           showNotification('⚠️ Errore: Chart.js non caricato correttamente', 'error');
         } else {
-          debugLog('✅ All libraries loaded successfully');
+          debugLog('✅ All libraries loaded successfully for scientific version');
         }
       }, 1000);
       
@@ -988,7 +1031,7 @@
             mapMarker = L.marker(e.latlng).addTo(map);
           }
           
-          showNotification('📍 Coordinate selezionate. Avvio analisi...', 'success');
+          showNotification('🔬 Coordinate selezionate. Avvio analisi scientifica...', 'success');
           handleAnalysis();
         });
         
@@ -1015,7 +1058,7 @@
       // Carica statistiche validazione
       updateValidationStats();
       
-      debugLog('🎉 Initialization completed - PorciniCast v2.5.5 ready!');
+      debugLog('🎉 Initialization completed - PorciniCast v2.5.6 Scientifically Corrected ready!');
     });
   </script>
 </body>
