@@ -1736,7 +1736,7 @@ async def api_score_super_advanced(
                 "species": species, "events_count": len(rain_events)
             }
             
-               try:
+        
         background_tasks.add_task(
             save_prediction_super_advanced,
             lat, lon, datetime.now().date().isoformat(),
@@ -1764,3 +1764,4 @@ async def api_score_super_advanced(
             "model_version": "2.5.0",
             "processing_time_ms": processing_time
         }
+
