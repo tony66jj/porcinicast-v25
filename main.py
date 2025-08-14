@@ -6,6 +6,8 @@ async def api_score_hybrid_weather(
     habitat: str = Query("", description="Habitat forzato"),
     autohabitat: int = Query(1, description="1=auto OSM, 0=manuale"),
     hours: int = Query(4, ge=2, le=8, description="Ore sul campo"),
+    aspect: str = Query("", description="Esposizione manuale (N, NE, E, SE, S, SW, W, NW)"),
+    autoaspect: int = Query(1, description="1=automatico DEM, 0=manuale"),
     background_tasks: BackgroundTasks = None
 ):
     """
@@ -41,6 +43,23 @@ async def api_score_hybrid_weather(
             osm_habitat_data = ("misto", 0.15, {})
         
         elev_m, slope_deg, aspect_deg, aspect_oct, concavity, drainage_proxy = elev_data
+        aspect_source = "automatico DEM"
+        aspect_used = aspect_oct or ""
+        if autoaspect == 0:
+            manual_oct = normalize_octant(aspect)
+            if manual_oct:
+                aspect_used = manual_oct
+                aspect_source = "manuale"
+
+        # Gestione esposizione: automatica (DEM) vs manuale
+        aspect_source = "automatico DEM"
+        aspect_used = aspect_oct or ""
+        if autoaspect == 0:
+            manual_oct = normalize_octant(aspect)
+            if manual_oct:
+                aspect_used = manual_oct
+                aspect_source = "manuale"
+
         
         # Habitat determination
         habitat_used = (habitat or "").strip().lower()
@@ -108,7 +127,10 @@ async def api_score_hybrid_weather(
         
         # ESPOSIZIONE CORRETTA - Advanced microclimate
         month_current = datetime.now(timezone.utc).month
-        microclimate_energy = microclimate_energy_advanced(aspect_oct, slope_deg, month_current, lat, elev_m)
+        microclimate_energy = microclimate_energy_advanced(aspect_used or aspect_oct, slope_deg, month_current, lat, elev_m)
+        # Ponderazione: auto pesa poco (k=0.35), manuale pesa come in v2.5.5/2.5.6 (k=1.0)
+        k_aspect = 0.35 if aspect_source.startswith("automatico") else 1.0
+        microclimate_energy = blend_to_neutral(microclimate_energy, neutral=1.0, weight=k_aspect)
         twi_index = twi_advanced_proxy(slope_deg, concavity, drainage_proxy)
         
         # SPECIE INFERENCE
@@ -243,6 +265,20 @@ async def api_score_hybrid_weather(
             for i in range(future_days)
         }
         
+        # Tabelle meteo
+        temp_past_table = {time_series[i]: round(Tmean_past[i], 1) for i in range(min(past_days, len(time_series)))}
+        temp_future_table = {
+            time_series[past_days + i] if past_days + i < len(time_series) else f"+{i+1}d": round(Tmean_future[i], 1)
+            for i in range(future_days)
+        }
+
+        # Tabelle meteo
+        temp_past_table = {time_series[i]: round(Tmean_past[i], 1) for i in range(min(past_days, len(time_series)))}
+        temp_future_table = {
+            time_series[past_days + i] if past_days + i < len(time_series) else f"+{i+1}d": round(Tmean_future[i], 1)
+            for i in range(future_days)
+        }
+
         # Final response
         response_payload = {
             "lat": lat, "lon": lon,
@@ -250,6 +286,10 @@ async def api_score_hybrid_weather(
             "slope_deg": round(slope_deg, 1),
             "aspect_deg": round(aspect_deg, 1),
             "aspect_octant": aspect_oct or "N/A",
+            "aspect_used": aspect_used or (aspect_oct or "N/A"),
+            "aspect_source": aspect_source,
+            "aspect_used": aspect_used or (aspect_oct or "N/A"),
+            "aspect_source": aspect_source,
             "concavity": round(concavity, 3),
             "drainage_proxy": round(drainage_proxy, 2),
             
@@ -290,6 +330,10 @@ async def api_score_hybrid_weather(
             
             "rain_past": rain_past_table,
             "rain_future": rain_future_table,
+            "temp_past": temp_past_table,
+            "temp_future": temp_future_table,
+            "temp_past": temp_past_table,
+            "temp_future": temp_future_table,
             
             "has_local_validations": has_validations,
             "validation_count": validation_count,
@@ -635,6 +679,33 @@ def geohash_encode_advanced(lat: float, lon: float, precision: int = 8) -> str:
     else:
         return f"{lat:.4f},{lon:.4f}"
 
+
+# ===== ESPOSIZIONE: HELPERS =====
+ASPECT_LABELS = {
+    "N":"N","NORD":"N","NORTH":"N",
+    "NE":"NE","N-E":"NE","NORD-EST":"NE","NORTHEAST":"NE",
+    "E":"E","EST":"E","EAST":"E",
+    "SE":"SE","S-E":"SE","SUD-EST":"SE","SOUTHEAST":"SE",
+    "S":"S","SUD":"S","SOUTH":"S",
+    "SW":"SW","S-W":"SW","SUD-OVEST":"SW","SOUTHWEST":"SW",
+    "W":"W","OVEST":"W","WEST":"W",
+    "NW":"NW","N-W":"NW","NORD-OVEST":"NW","NORTHWEST":"NW"
+}
+
+def normalize_octant(label: str) -> str:
+    if not label:
+        return ""
+    return ASPECT_LABELS.get(label.strip().upper(), "")
+
+def blend_to_neutral(value: float, neutral: float = 1.0, weight: float = 0.35) -> float:
+    """Attenua l'effetto verso 'neutral' con fattore 'weight' (0..1).
+    weight=0 mantiene il valore al neutro; weight=1 lascia il valore invariato.
+    Per l'esposizione automatica usiamo weight=0.35; per quella manuale 1.0.
+    """
+    try:
+        return neutral + (float(value) - neutral) * float(weight)
+    except Exception:
+        return value
 # ===== VPD AVANZATO =====
 def saturation_vapor_pressure_hpa(Tc: float) -> float:
     return 6.112 * math.exp((17.67 * Tc) / (Tc + 243.5))
@@ -2082,6 +2153,8 @@ async def api_score_scientifically_corrected(
     habitat: str = Query("", description="Habitat forzato"),
     autohabitat: int = Query(1, description="1=auto OSM, 0=manuale"),
     hours: int = Query(4, ge=2, le=8, description="Ore sul campo"),
+    aspect: str = Query("", description="Esposizione manuale (N, NE, E, SE, S, SW, W, NW)"),
+    autoaspect: int = Query(1, description="1=automatico DEM, 0=manuale"),
     background_tasks: BackgroundTasks = None
 ):
     """
@@ -2117,6 +2190,16 @@ async def api_score_scientifically_corrected(
             osm_habitat_data = ("misto", 0.15, {})
         
         elev_m, slope_deg, aspect_deg, aspect_oct, concavity, drainage_proxy = elev_data
+
+        # Gestione esposizione: automatica (DEM) vs manuale
+        aspect_source = "automatico DEM"
+        aspect_used = aspect_oct or ""
+        if autoaspect == 0:
+            manual_oct = normalize_octant(aspect)
+            if manual_oct:
+                aspect_used = manual_oct
+                aspect_source = "manuale"
+
         
         # Habitat determination
         habitat_used = (habitat or "").strip().lower()
@@ -2181,7 +2264,10 @@ async def api_score_scientifically_corrected(
         
         # ESPOSIZIONE CORRETTA - Advanced microclimate
         month_current = datetime.now(timezone.utc).month
-        microclimate_energy = microclimate_energy_advanced(aspect_oct, slope_deg, month_current, lat, elev_m)
+        microclimate_energy = microclimate_energy_advanced(aspect_used or aspect_oct, slope_deg, month_current, lat, elev_m)
+        # Ponderazione: auto pesa poco (k=0.35), manuale pesa come in v2.5.5/2.5.6 (k=1.0)
+        k_aspect = 0.35 if aspect_source.startswith("automatico") else 1.0
+        microclimate_energy = blend_to_neutral(microclimate_energy, neutral=1.0, weight=k_aspect)
         twi_index = twi_advanced_proxy(slope_deg, concavity, drainage_proxy)
         
         # SPECIE INFERENCE
