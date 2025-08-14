@@ -1,16 +1,17 @@
-# netlify.toml - Codice Definitivo
+# netlify.toml
 
 [build]
-  base    = "frontend"
-  publish = "."
-  command = ""
+  base    = "frontend"   # Netlify guarda SOLO la cartella /frontend
+  publish = "."          # pubblica /frontend
+  command = ""           # nessun build
 
 [[redirects]]
   from = "/api/*"
-  to = "https://porcinicast-v25-api.onrender.com/api/:splat"
+  to   = "https://porcinicast-v25.onrender.com/api/:splat"
   status = 200
-  force = true
+  force  = true
 
+# (facoltativo) header di sicurezza: puoi lasciarli
 [[headers]]
   for = "/*"
   [headers.values]
