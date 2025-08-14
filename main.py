@@ -1,4 +1,4 @@
-# main.py — Trova Porcini API v2.5.0 SUPER AVANZATO - Render Compatible via Docker
+# main.py — Trova Porcini API v2.5.2 SUPER AVANZATO - Render Compatible via Docker
 # VERSIONE COMPLETA che mantiene TUTTE le funzionalità scientifiche avanzate
 # Soluzione: usa Dockerfile per gestire dipendenze complesse
 
@@ -47,8 +47,8 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 app = FastAPI(
-    title="Trova Porcini API v2.5.0 - SUPER AVANZATO", 
-    version="2.5.0",
+    title="Trova Porcini API v2.5.2 - SUPER AVANZATO", 
+    version="2.5.2",
     description="Modello fenologico avanzato per previsione fruttificazione Boletus spp."
 )
 
@@ -60,7 +60,7 @@ app.add_middleware(
     allow_credentials=True
 )
 
-HEADERS = {"User-Agent":"TrovaPorcini/2.5.0 (+scientific)", "Accept-Language":"it"}
+HEADERS = {"User-Agent":"TrovaPorcini/2.5.2 (+scientific)", "Accept-Language":"it"}
 OWM_KEY = os.environ.get("OPENWEATHER_API_KEY")
 CDS_API_URL = os.environ.get("CDS_API_URL", "https://cds.climate.copernicus.eu/api")
 CDS_API_KEY = os.environ.get("CDS_API_KEY", "")
@@ -92,7 +92,7 @@ def init_database():
                 habitat_observed TEXT,
                 weather_conditions TEXT,
                 predicted_score INTEGER,
-                model_version TEXT DEFAULT '2.5.0',
+                model_version TEXT DEFAULT '2.5.2',
                 user_experience_level INTEGER DEFAULT 3,
                 validation_status TEXT DEFAULT 'pending',
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -116,7 +116,7 @@ def init_database():
                 weather_conditions TEXT,
                 notes TEXT,
                 predicted_score INTEGER,
-                model_version TEXT DEFAULT '2.5.0',
+                model_version TEXT DEFAULT '2.5.2',
                 search_thoroughness INTEGER DEFAULT 3,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 geohash TEXT,
@@ -137,7 +137,7 @@ def init_database():
                 confidence_data TEXT,
                 weather_data TEXT,
                 model_features TEXT,
-                model_version TEXT DEFAULT '2.5.0',
+                model_version TEXT DEFAULT '2.5.2',
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 geohash TEXT,
                 validated BOOLEAN DEFAULT FALSE,
@@ -590,7 +590,8 @@ def infer_porcino_species_super_advanced(habitat_used: str, month: int, elev_m: 
         
         score = 1.0
         
-        if month in profile["peak_m"]:
+        # FIX: Corretto l'accesso alla chiave 'peak_m' che si trova dentro 'season'
+        if month in profile["season"]["peak_m"]:
             score *= 1.5
         elif profile["season"]["start_m"] <= month <= profile["season"]["end_m"]:
             score *= 1.0
@@ -1051,7 +1052,7 @@ def save_prediction_super_advanced(lat: float, lon: float, date: str, score: int
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ''', (lat, lon, date, score, species, habitat, 
               json.dumps(confidence_data), json.dumps(weather_data),
-              json.dumps(model_features), "2.5.0", geohash))
+              json.dumps(model_features), "2.5.2", geohash))
         
         conn.commit()
         conn.close()
@@ -1121,7 +1122,7 @@ def build_analysis_super_advanced_v25(payload: Dict[str, Any]) -> str:
     
     lines = []
     
-    lines.append("<h4>🧬 Analisi Biologica Super Avanzata v2.5.0</h4>")
+    lines.append("<h4>🧬 Analisi Biologica Super Avanzata v2.5.2</h4>")
     lines.append(f"<p><em>Modello fenologico basato su letteratura scientifica: Boddy et al. (2014), Büntgen et al. (2012), Kauserud et al. (2010)</em></p>")
     
     lines.append(f"<h4>🍄 Specie e Habitat</h4>")
@@ -1196,7 +1197,7 @@ def build_analysis_super_advanced_v25(payload: Dict[str, Any]) -> str:
     else:
         lines.append("<p class='return-advice'><strong>⏸️ Strategia ATTESA</strong>: Condizioni attuali sfavorevoli. Monitora le previsioni per miglioramenti nei prossimi giorni.</p>")
     
-    lines.append(f"<h4>✨ Innovazioni Modello v2.5.0</h4>")
+    lines.append(f"<h4>✨ Innovazioni Modello v2.5.2</h4>")
     lines.append("<div style='background:#0a0f14;padding:12px;border-radius:8px;border-left:3px solid #62d5b4'>")
     lines.append("<ul style='margin:0;padding-left:20px'>")
     lines.append("<li><strong>Lag biologico dinamico</strong>: Modellazione basata su Boddy et al. (2014) con correzioni SMI, shock termico e VPD</li>")
@@ -1229,7 +1230,7 @@ async def health():
     return {
         "ok": True, 
         "time": datetime.now(timezone.utc).isoformat(), 
-        "version": "2.5.0",
+        "version": "2.5.2",
         "model": "super_advanced",
         "capabilities": capabilities,
         "features": [
@@ -1307,7 +1308,7 @@ async def report_sighting(
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ''', (lat, lon, date, species, quantity, size_cm_avg, size_cm_max, confidence,
               photo_url, notes, habitat_observed, weather_conditions, user_experience_level,
-              geohash, "2.5.0"))
+              geohash, "2.5.2"))
         
         conn.commit()
         conn.close()
@@ -1338,7 +1339,7 @@ async def report_no_findings(
              weather_conditions, notes, search_thoroughness, geohash, model_version)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ''', (lat, lon, date, searched_hours, search_method, habitat_searched,
-              weather_conditions, notes, search_thoroughness, geohash, "2.5.0"))
+              weather_conditions, notes, search_thoroughness, geohash, "2.5.2"))
         
         conn.commit()
         conn.close()
@@ -1410,7 +1411,7 @@ async def validation_stats_super_advanced():
                 "sud_italia": geo_dist[2] or 0
             },
             "ready_for_ml": total_validations >= 100,
-            "model_version": "2.5.0",
+            "model_version": "2.5.2",
             "capabilities": {
                 "numpy": NUMPY_AVAILABLE,
                 "scipy": SCIPY_AVAILABLE,
@@ -1433,7 +1434,7 @@ async def api_score_super_advanced(
     background_tasks: BackgroundTasks = None
 ):
     """
-    🚀 ENDPOINT PRINCIPALE SUPER AVANZATO v2.5.0
+    🚀 ENDPOINT PRINCIPALE SUPER AVANZATO v2.5.2
     Mantiene TUTTE le funzionalità scientifiche avanzate
     """
     start_time = time.time()
@@ -1779,7 +1780,7 @@ async def api_score_super_advanced(
             "validation_count": validation_count,
             "validation_accuracy": round(validation_accuracy, 2),
             
-            "model_version": "2.5.0",
+            "model_version": "2.5.2",
             "model_type": "super_advanced",
             "processing_time_ms": processing_time,
             "timestamp": datetime.now(timezone.utc).isoformat(),
@@ -1836,7 +1837,7 @@ async def api_score_super_advanced(
         processing_time = round((time.time() - start_time) * 1000, 1)
 
         # log con stack-trace completo
-        logger.exception(f"Error in /api/score for ({lat:.5f}, {lon:.5f}): {e}")
+        logger.exception(f"Error in /api/score for ({lat:.5f}, {lon:.5f})")
 
         # risposta JSON coerente col resto dell’API
-        raise HTTPException(status_code=500, detail=f"Errore interno del server: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
