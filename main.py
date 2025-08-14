@@ -869,7 +869,7 @@ OVERPASS_URLS = [
     "https://overpass.openstreetmap.ru/api/interpreter"
 ]
 
-async def fetch_osm_habitat_super_advanced(lat: float, lon: float, radius_m: int = 500) -> Tuple[str, float, Dict[str,float]]:
+async def fetch_osm_habitat_super_advanced(lat: float, lon: float, radius_m: int = 500) -> Tuple[str, float, Dict[str, float]]:
     
     query = f"""
     [out:json][timeout:30];
@@ -1493,7 +1493,6 @@ async def api_score_super_advanced(
 
             # 1) Tentativo "safe" su Open-Meteo (senza models, variabili minime)
             try:
-                import httpx
                 om_url = "https://api.open-meteo.com/v1/forecast"
                 past = 15
                 future = 10
@@ -1512,15 +1511,16 @@ async def api_score_super_advanced(
                     d2 = r.json()
                     if "daily" in d2:
                         daily = d2["daily"]
+                        logger.info("Meteo ottenuto con fallback SAFE di Open-Meteo")
             except Exception as e:
                 logger.warning(f"Open-Meteo safe fallback non riuscito: {e}")
 
             # 2) Se OM safe non ha dato 'daily', prova OpenWeather
             if daily is None:
                 if ow_data and "daily" in ow_data:
+                    logger.info("Meteo ottenuto con fallback OpenWeather")
                     ow_daily = ow_data["daily"]
-
-                    from datetime import datetime
+                    
                     time_series = [
                         datetime.utcfromtimestamp(d["dt"]).date().isoformat() for d in ow_daily
                     ]
@@ -1534,6 +1534,7 @@ async def api_score_super_advanced(
                     ET0_series = [2.0] * len(ow_daily)
                     RH_series = [float(d.get("humidity", 65.0)) for d in ow_daily]
                 else:
+                    logger.error("Tutti i fallback per i dati meteo sono falliti.")
                     raise HTTPException(500, "Errore dati meteorologici")
             else:
                 # OM safe riuscito: usa la struttura OM
@@ -1541,27 +1542,28 @@ async def api_score_super_advanced(
                 P_series = [float(x or 0.0) for x in daily.get("precipitation_sum", [])]
                 Tmin_series = [float(x or 0.0) for x in daily.get("temperature_2m_min", [])]
                 Tmax_series = [float(x or 0.0) for x in daily.get("temperature_2m_max", [])]
-                if "temperature_2m_mean" in daily:
+                if "temperature_2m_mean" in daily and daily.get("temperature_2m_mean"):
                     Tmean_series = [float(x or 0.0) for x in daily["temperature_2m_mean"]]
                 else:
                     Tmean_series = [(mn + mx) / 2.0 for mn, mx in zip(Tmin_series, Tmax_series)]
-                ET0_series = daily.get("et0_fao_evapotranspiration", [2.0] * len(P_series))
+                ET0_series = [2.0] * len(P_series) # ET0 non disponibile in safe mode
                 RH_series = daily.get("relative_humidity_2m_mean", [65.0] * len(P_series))
         else:
             # Open-Meteo (full) già ok
+            logger.info("Meteo ottenuto con chiamata standard Open-Meteo")
             daily = om_data["daily"]
             time_series = daily["time"]
             P_series = [float(x or 0.0) for x in daily["precipitation_sum"]]
             Tmin_series = [float(x or 0.0) for x in daily["temperature_2m_min"]]
             Tmax_series = [float(x or 0.0) for x in daily["temperature_2m_max"]]
             Tmean_series = [float(x or 0.0) for x in daily.get("temperature_2m_mean", [])]
-            if not Tmean_series:
+            if not Tmean_series or not any(Tmean_series):
                 Tmean_series = [(mn + mx) / 2.0 for mn, mx in zip(Tmin_series, Tmax_series)]
             ET0_series = daily.get("et0_fao_evapotranspiration", [2.0] * len(P_series))
             RH_series = daily.get("relative_humidity_2m_mean", [65.0] * len(P_series))
 
         # === FINE BLOCCO METEO AGGIORNATO ===
-
+        
         past_days = 15
         future_days = 10
         
@@ -1689,6 +1691,23 @@ async def api_score_super_advanced(
             temporal_consistency=0.8
         )
         
+        # --- Funzioni Placeholder Aggiunte ---
+        def estimate_harvest_super_advanced(index, hours, species, confidence):
+            base_harvest = index * confidence * (hours / 4.0)
+            if base_harvest > 80: return "Eccellente", "Raccolto potenzialmente molto abbondante."
+            if base_harvest > 60: return "Buono", "Probabilità elevate di un buon raccolto."
+            if base_harvest > 40: return "Moderato", "Raccolto possibile, ma non garantito."
+            if base_harvest > 20: return "Scarso", "Probabilità di raccolto basse."
+            return "Molto scarso", "Condizioni sfavorevoli per il raccolto."
+        
+        def estimate_mushroom_sizes_advanced(events, tmean, rh, species):
+            if tmean < 15 and rh > 75: 
+                return {"avg_size": 14, "size_class": "Grande", "size_range": [10, 18]}
+            if tmean > 20 or rh < 65:
+                return {"avg_size": 8, "size_class": "Piccolo", "size_range": [5, 12]}
+            return {"avg_size": 11, "size_class": "Medio", "size_range": [7, 15]}
+        # --- Fine Funzioni Placeholder ---
+
         # Harvest and size estimates
         harvest_estimate, harvest_note = estimate_harvest_super_advanced(current_index, hours, species, confidence_5d["overall"])
         size_estimates = estimate_mushroom_sizes_advanced(flush_events_details, tmean_7d, rh_7d, species)
@@ -1783,14 +1802,6 @@ async def api_score_super_advanced(
             }
         }
         
-        # --- Aggiunte funzioni non presenti in main.py, ma necessarie per la logica completa
-        def estimate_harvest_super_advanced(index, hours, species, confidence):
-            return "Moderato", "Raccolto stimato per un cercatore esperto."
-        
-        def estimate_mushroom_sizes_advanced(events, tmean, rh, species):
-            return {"avg_size": 12, "size_class": "Medio-Grande", "size_range": [8, 16]}
-        # --- Fine funzioni aggiunte
-
         response_payload["dynamic_explanation"] = build_analysis_super_advanced_v25(response_payload)
         
         # Save prediction for ML
