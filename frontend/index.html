@@ -206,21 +206,6 @@
             <option>castagno</option><option>faggio</option><option>quercia</option>
             <option>conifere</option><option>misto</option><option>altro</option>
           </select>
-        <div>
-          <label>Esposizione</label>
-          <div class="input-group">
-            <select id="aspect-mode">
-              <option value="auto" selected>Auto (peso ridotto)</option>
-              <option value="manual">Manuale (peso maggiore)</option>
-            </select>
-            <select id="aspect-octant">
-              <option value="">(se manuale)</option>
-              <option value="N">N</option><option value="NE">NE</option><option value="E">E</option><option value="SE">SE</option>
-              <option value="S">S</option><option value="SW">SW</option><option value="W">W</option><option value="NW">NW</option>
-            </select>
-          </div>
-        </div>
-
         </div>
         <div>
           <label>Ore sul campo</label>
@@ -331,16 +316,7 @@
           </div>
         </div>
       </div>
-      
-      <div class="grid g1" style="margin-top:12px;">
-        <div>
-          <h4>🌡️ Temperature (ultimi 15 giorni)</h4>
-          <div id="temp-past-table">
-            <p class="muted">In attesa di analisi...</p>
-          </div>
-        </div>
-      </div>
-<div style="margin-top:16px;">
+      <div style="margin-top:16px;">
         <h4>💧 Eventi di Flush con Lag Specie-Specifico</h4>
         <div id="flush-events" class="events">
           <p class="muted">In attesa di analisi...</p>
@@ -506,9 +482,7 @@
           lon: lon.toString(),
           habitat: habitat,
           hours: hours.toString(),
-          autohabitat: habitat ? '0' : '1',
-          aspect_mode: document.getElementById('aspect-mode').value,
-          aspect_octant_manual: document.getElementById('aspect-octant').value || ''
+          autohabitat: habitat ? '0' : '1'
         });
         
         const response = await fetch(`${API_BASE}/api/score?${params}`);
@@ -838,13 +812,35 @@
       debugLog('Updating rain tables scientifically corrected:', { 
         past: data.rain_past ? Object.keys(data.rain_past).length : 0, 
         future: data.rain_future ? Object.keys(data.rain_future).length : 0
-      });
+      }
+
+
+    function updateTempTables(data) {
+      try {
+        const tempDiv = document.getElementById('temp-past-table');
+        if (!tempDiv) return;
+        if (data.temp_past && Object.keys(data.temp_past).length > 0) {
+          // Ordina per data crescente e poi mostra gli ultimi 15
+          const rows = Object.entries(data.temp_past)
+            .sort((a,b)=>new Date(a[0]) - new Date(b[0]))
+            .slice(-15)
+            .map(([date, t]) => `<tr><td>${formatDate(date)}</td><td>${Number(t).toFixed(1)}</td></tr>`)
+            .join('');
+          tempDiv.innerHTML = `<table><tr><th>Data</th><th>T media (°C)</th></tr>${rows}</table>`;
+        } else {
+          tempDiv.innerHTML = '<p class="muted">Nessun dato temperatura.</p>';
+        }
+      } catch (e) {
+        console.error('Errore updateTempTables', e);
+      }
+    }
+);
       
       try {
         const pastTable = document.getElementById('rain-past-table');
         if (data.rain_past && Object.keys(data.rain_past).length > 0) {
           let html = '<table><tr><th>Data</th><th>Pioggia (mm)</th></tr>';
-          Object.entries(data.rain_past).reverse().slice(0, 7).forEach(([date, mm]) => {
+          Object.entries(data.rain_past).sort((a,b)=>new Date(a[0]) - new Date(b[0])).reverse().slice(0, 15).forEach(([date, mm]) => {
             html += `<tr><td>${formatDate(date)}</td><td>${mm}</td></tr>`;
           });
           html += '</table>';
@@ -1173,23 +1169,7 @@
       
       debugLog('🎉 Initialization completed - PorciniCast v2.5.6 Scientifically Corrected ready!');
     });
-  
-    function updateTempTables(data) {
-      const cont = document.getElementById('temp-past-table');
-      if (!data.temp_past_mean) {
-        cont.innerHTML = '<p class="muted">Nessun dato temperatura.</p>';
-        return;
-      }
-      const entries = Object.entries(data.temp_past_mean).reverse().slice(0, 15);
-      let html = '<table><thead><tr><th>Data</th><th>T media (°C)</th><th>T min</th><th>T max</th></tr></thead><tbody>';
-      for (const [date, tmean] of entries) {
-        const tmin = data.temp_past_min[date] ?? '';
-        const tmax = data.temp_past_max[date] ?? '';
-        html += `<tr><td>${date}</td><td>${tmean}</td><td>${tmin}</td><td>${tmax}</td></tr>`;
-      }
-      html += '</tbody></table>';
-      cont.innerHTML = html;
-    }
-</script>
+  </script>
 </body>
 </html>
+
