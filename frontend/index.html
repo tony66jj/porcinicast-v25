@@ -4,6 +4,10 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Trova Porcini – Analisi v2.5.0</title>
+  
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+  
   <style>
     :root{
       --bg:#0b0d10; --panel:#12161b; --muted:#8aa0b6; --text:#e6eef6;
@@ -18,7 +22,7 @@
     header{display:flex;gap:16px;align-items:center;margin-bottom:18px;flex-wrap:wrap}
     header h1{font-size:22px;margin:0}
     header .badge{padding:4px 10px;border-radius:999px;background:linear-gradient(90deg,#1b2230,#17202b);color:#cfe6ff;border:1px solid #283343}
-    .panel{background:linear-gradient(180deg,#12161b,#0f141a);border:1px solid #1e2937;border-radius:var(--radius);box-shadow:var(--shadow)}
+    .panel{background:linear-gradient(180deg,#12161b,#0f141a);border:1px solid #1e2937;border-radius:var(--radius);box-shadow:var(--shadow); margin-bottom: 20px;}
     .panel h3{margin:0 0 8px 0;font-size:18px}
     .controls{display:grid;grid-template-columns:1.1fr .8fr .8fr .8fr .8fr auto;gap:10px;align-items:end;padding:16px}
     label{font-size:12px;color:var(--muted);display:block;margin-bottom:6px}
@@ -59,7 +63,16 @@
     .confidence-label{font-size:10px;color:var(--muted);margin-bottom:4px}
     .confidence-value{font-size:14px;font-weight:600}
     
-    /* Stili migliorati per sezione crowdsource */
+    /* Stili per la mappa interattiva */
+    #map {
+      height: 450px;
+      width: 100%;
+      border-radius: var(--radius);
+      border: 1px solid #1e2937;
+      box-shadow: var(--shadow);
+      cursor: pointer;
+    }
+    
     .crowdsource{
       background:linear-gradient(135deg,#1a2332,#0f1419);
       border:2px solid #2a4a3d;
@@ -82,7 +95,6 @@
     .notification.error{background:#dc3545}
     .version-badge{background:linear-gradient(45deg,#667eea,#764ba2);padding:3px 8px;border-radius:12px;font-size:11px;font-weight:600}
     
-    /* Stili per analisi dettagliata */
     .field-analysis{
       background:#0a0f14;
       border-radius:12px;
@@ -124,11 +136,10 @@
   <div class="wrap">
     <header>
       <h1>🍄 Trova Porcini — Analisi Scientifica Avanzata</h1>
-      <span class="badge version-badge">v2.5.0</span>
+      <span class="badge version-badge">v2.5.1</span>
       <span class="badge">Lag Biologico Dinamico</span>
     </header>
 
-    <!-- Controls -->
     <div class="panel">
       <div class="controls">
         <div>
@@ -137,11 +148,11 @@
         </div>
         <div>
           <label>Latitudine</label>
-          <input id="lat" type="number" step="0.0001" placeholder="42.88" />
+          <input id="lat" type="number" step="0.0001" placeholder="Copia da Google Maps" />
         </div>
         <div>
           <label>Longitudine</label>
-          <input id="lon" type="number" step="0.0001" placeholder="11.63" />
+          <input id="lon" type="number" step="0.0001" placeholder="o clicca sulla mappa" />
         </div>
         <div>
           <label>Habitat</label>
@@ -164,7 +175,10 @@
       </div>
     </div>
 
-    <!-- KPIs Principali -->
+    <div class="panel">
+        <div id="map"></div>
+    </div>
+
     <div class="grid g3">
       <div class="panel section">
         <h3>🎯 Indice Oggi</h3>
@@ -172,7 +186,7 @@
         <div class="hr"></div>
         <div class="metric"><div class="k">Finestra migliore</div><div id="k-window" class="v">—</div></div>
         <div style="margin-top:8px;">
-          <span id="k-model-version" class="chip">v2.5.0</span>
+          <span id="k-model-version" class="chip">v2.5.1</span>
           <span id="k-has-validations" class="chip">validazioni: —</span>
         </div>
       </div>
@@ -218,7 +232,6 @@
       </div>
     </div>
 
-    <!-- Forecast chart -->
     <div class="panel section">
       <h3>📈 Previsione Prossimi 10 Giorni (Lag Biologico Dinamico)</h3>
       <div style="margin-bottom:8px;color:var(--muted);font-size:12px;">
@@ -227,7 +240,6 @@
       <canvas id="chart"></canvas>
     </div>
 
-    <!-- Analisi dettagliata campo -->
     <div class="panel section">
       <h3>🧭 Analisi Dettagliata e Consigli Scientifici</h3>
       <div id="field-analysis" class="field-analysis">
@@ -235,7 +247,6 @@
       </div>
     </div>
 
-    <!-- Dati Meteo -->
     <div class="panel section">
       <h3>🌧️ Dati Meteorologici e Eventi Piovosi</h3>
       <div class="grid g2">
@@ -260,7 +271,6 @@
       </div>
     </div>
 
-    <!-- Crowd-sourcing Section -->
     <div class="panel section crowdsource">
       <h3>🧬 Contribuisci alla Ricerca Scientifica</h3>
       <p style="margin-bottom:20px;color:#cfe6ff;">Aiuta a migliorare il modello fenologico condividendo le tue osservazioni sul campo. I tuoi dati vengono utilizzati per calibrare l'algoritmo di previsione.</p>
@@ -317,18 +327,15 @@
       </div>
     </div>
 
-    <!-- Footer -->
     <footer>
-      <p>🍄 <strong>PorciniCast v2.5.0</strong> — Modello fenologico scientifico per previsione fruttificazione <em>Boletus</em> spp.</p>
+      <p>🍄 <strong>PorciniCast v2.5.1</strong> — Modello fenologico scientifico per previsione fruttificazione <em>Boletus</em> spp.</p>
       <p>Basato su letteratura peer-reviewed: Boddy & Heilmann-Clausen (2014), Büntgen et al. (2012), Kauserud et al. (2010)</p>
-      <p>Sviluppato con FastAPI • NumPy/SciPy • SQLite • Docker • Crowd-sourcing ML-ready</p>
+      <p>Sviluppato con FastAPI • NumPy/SciPy • SQLite • Docker • Crowd-sourcing ML-ready • Mappa Interattiva Leaflet.js</p>
     </footer>
   </div>
 
-  <!-- Notification container -->
   <div id="notification" class="notification"></div>
 
-  <!-- Chart.js per i grafici -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.min.js"></script>
 
   <script>
@@ -337,6 +344,8 @@
     
     let currentChart = null;
     let currentLocation = { lat: null, lon: null };
+    let map = null; // Variabile per la mappa
+    let mapMarker = null; // Variabile per il marker sulla mappa
 
     // === UTILITIES ===
     function showNotification(message, type = 'success') {
@@ -384,7 +393,10 @@
         });
         
         const response = await fetch(`${API_BASE}/api/score?${params}`);
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        if (!response.ok) {
+            const errData = await response.json().catch(() => ({ detail: 'Errore generico' }));
+            throw new Error(`HTTP ${response.status}: ${errData.detail}`);
+        }
         return await response.json();
       } catch (error) {
         throw new Error(`Errore analisi: ${error.message}`);
@@ -441,7 +453,6 @@
         document.getElementById('k-window').textContent = 'Nessuna';
       }
 
-      // Confidence 5D
       const conf = data.confidence_detailed;
       if (conf) {
         document.getElementById('conf-met').textContent = conf.meteorological?.toFixed(2) || '—';
@@ -452,27 +463,20 @@
         document.getElementById('conf-overall').textContent = conf.overall?.toFixed(2) || '—';
       }
 
-      // Harvest & Size
       document.getElementById('k-harvest').textContent = data.harvest_estimate || '—';
       document.getElementById('k-harvest-note').textContent = data.harvest_note || '';
       document.getElementById('k-size').textContent = data.size_cm ? `${data.size_cm} cm` : '—';
       document.getElementById('k-size-range').textContent = data.size_range_cm ? 
         `${data.size_range_cm[0]}-${data.size_range_cm[1]} cm` : '—';
 
-      // Validations
       const hasValidations = data.has_local_validations ? 'Sì' : 'No';
       document.getElementById('k-has-validations').textContent = `validazioni: ${hasValidations}`;
     }
 
     function updateChart(forecast) {
       const ctx = document.getElementById('chart').getContext('2d');
-      
-      if (currentChart) {
-        currentChart.destroy();
-      }
-
+      if (currentChart) currentChart.destroy();
       const labels = forecast.map((_, i) => `Giorno ${i + 1}`);
-      
       currentChart = new Chart(ctx, {
         type: 'line',
         data: {
@@ -494,32 +498,17 @@
         options: {
           responsive: true,
           maintainAspectRatio: false,
-          plugins: {
-            legend: { display: false }
-          },
+          plugins: { legend: { display: false } },
           scales: {
-            y: {
-              beginAtZero: true,
-              max: 100,
-              grid: { color: 'rgba(255,255,255,0.1)' },
-              ticks: { color: '#8aa0b6' }
-            },
-            x: {
-              grid: { color: 'rgba(255,255,255,0.1)' },
-              ticks: { color: '#8aa0b6' }
-            }
+            y: { beginAtZero: true, max: 100, grid: { color: 'rgba(255,255,255,0.1)' }, ticks: { color: '#8aa0b6' } },
+            x: { grid: { color: 'rgba(255,255,255,0.1)' }, ticks: { color: '#8aa0b6' } }
           },
-          elements: {
-            point: {
-              hoverRadius: 8
-            }
-          }
+          elements: { point: { hoverRadius: 8 } }
         }
       });
     }
 
     function updateRainTables(data) {
-      // Past rain table
       const pastTable = document.getElementById('rain-past-table');
       if (data.rain_past && Object.keys(data.rain_past).length > 0) {
         let html = '<table><tr><th>Data</th><th>Pioggia (mm)</th></tr>';
@@ -532,7 +521,6 @@
         pastTable.innerHTML = '<p class="muted">Dati non disponibili</p>';
       }
 
-      // Future rain table
       const futureTable = document.getElementById('rain-future-table');
       if (data.rain_future && Object.keys(data.rain_future).length > 0) {
         let html = '<table><tr><th>Data</th><th>Pioggia (mm)</th></tr>';
@@ -548,7 +536,6 @@
 
     function updateFlushEvents(data) {
       const eventsDiv = document.getElementById('flush-events');
-      
       if (data.flush_events && data.flush_events.length > 0) {
         let html = '<ul>';
         data.flush_events.slice(0, 5).forEach(event => {
@@ -599,7 +586,6 @@
         showNotification('Inserisci una località da cercare', 'error');
         return;
       }
-
       setLoading(true);
       try {
         const result = await geocodeLocation(query);
@@ -607,47 +593,62 @@
         document.getElementById('lon').value = result.lon.toFixed(4);
         currentLocation = { lat: result.lat, lon: result.lon };
         showNotification(`Trovato: ${result.display}`);
+        map.setView([result.lat, result.lon], 12);
+        if (mapMarker) mapMarker.setLatLng([result.lat, result.lon]);
+        else mapMarker = L.marker([result.lat, result.lon]).addTo(map);
       } catch (error) {
         showNotification(error.message, 'error');
       } finally {
         setLoading(false);
       }
     }
-
+    
+    // NUOVA LOGICA DI ANALISI INTELLIGENTE
     async function handleAnalysis() {
-      const lat = parseFloat(document.getElementById('lat').value);
-      const lon = parseFloat(document.getElementById('lon').value);
-      const habitat = document.getElementById('habitat').value;
-      const hours = parseInt(document.getElementById('hours').value);
+        let lat = parseFloat(document.getElementById('lat').value);
+        let lon = parseFloat(document.getElementById('lon').value);
+        const query = document.getElementById('q').value.trim();
 
-      if (!lat || !lon || isNaN(lat) || isNaN(lon)) {
-        showNotification('Inserisci coordinate valide o usa il geocoding', 'error');
-        return;
-      }
+        setLoading(true);
 
-      if (lat < 35 || lat > 47 || lon < 6 || lon > 19) {
-        showNotification('Coordinate fuori dall\'area Italia', 'error');
-        return;
-      }
+        try {
+            // Se lat/lon non sono validi, ma c'è una query di testo, esegui geocoding prima
+            if ((!lat || !lon || isNaN(lat) || isNaN(lon)) && query) {
+                showNotification('Coordinate non valide, uso la località testuale...', 'warn');
+                const geoResult = await geocodeLocation(query);
+                lat = geoResult.lat;
+                lon = geoResult.lon;
+                document.getElementById('lat').value = lat.toFixed(4);
+                document.getElementById('lon').value = lon.toFixed(4);
+            }
 
-      currentLocation = { lat, lon };
-      setLoading(true);
+            if (!lat || !lon || isNaN(lat) || isNaN(lon)) {
+                throw new Error('Inserisci coordinate valide o una località da cercare');
+            }
 
-      try {
-        const data = await getAnalysis(lat, lon, habitat, hours);
-        
-        updateKPIs(data);
-        updateChart(data.forecast || []);
-        updateRainTables(data);
-        updateFlushEvents(data);
-        updateFieldAnalysis(data);
-        
-        showNotification(`Analisi completata: ${data.index}/100 per ${data.species}`);
-      } catch (error) {
-        showNotification(error.message, 'error');
-      } finally {
-        setLoading(false);
-      }
+            if (lat < 35 || lat > 47 || lon < 6 || lon > 19) {
+                throw new Error('Coordinate fuori dall\'area geografica supportata (Italia)');
+            }
+
+            currentLocation = { lat, lon };
+            const habitat = document.getElementById('habitat').value;
+            const hours = parseInt(document.getElementById('hours').value);
+
+            const data = await getAnalysis(lat, lon, habitat, hours);
+            
+            updateKPIs(data);
+            updateChart(data.forecast || []);
+            updateRainTables(data);
+            updateFlushEvents(data);
+            updateFieldAnalysis(data);
+            
+            showNotification(`Analisi completata: ${data.index}/100 per ${data.species}`);
+
+        } catch (error) {
+            showNotification(error.message, 'error');
+        } finally {
+            setLoading(false);
+        }
     }
 
     async function handleReportSighting() {
@@ -655,38 +656,23 @@
         showNotification('Esegui prima un\'analisi per impostare la posizione', 'error');
         return;
       }
-
-      const species = document.getElementById('sighting-species').value;
-      const quantity = parseInt(document.getElementById('sighting-quantity').value) || 1;
-      const size = parseFloat(document.getElementById('sighting-size').value) || null;
-      const habitat = document.getElementById('sighting-habitat').value.trim();
-      const confidence = parseFloat(document.getElementById('sighting-confidence').value);
-      const notes = document.getElementById('sighting-notes').value.trim();
-
       const data = {
-        lat: currentLocation.lat,
-        lon: currentLocation.lon,
-        species: species,
-        quantity: quantity,
-        confidence: confidence,
-        notes: notes,
-        habitat_observed: habitat
+        lat: currentLocation.lat, lon: currentLocation.lon,
+        species: document.getElementById('sighting-species').value,
+        quantity: parseInt(document.getElementById('sighting-quantity').value) || 1,
+        confidence: parseFloat(document.getElementById('sighting-confidence').value),
+        notes: document.getElementById('sighting-notes').value.trim(),
+        habitat_observed: document.getElementById('sighting-habitat').value.trim(),
+        size_cm_avg: parseFloat(document.getElementById('sighting-size').value) || null
       };
-
-      if (size) data.size_cm_avg = size;
-
       setLoading(true);
       try {
         await reportSighting(data);
         showNotification('Segnalazione registrata con successo!');
-        
-        // Reset form
         document.getElementById('sighting-quantity').value = '1';
         document.getElementById('sighting-size').value = '';
         document.getElementById('sighting-habitat').value = '';
         document.getElementById('sighting-notes').value = '';
-        
-        // Update stats
         setTimeout(updateValidationStats, 1000);
       } catch (error) {
         showNotification(error.message, 'error');
@@ -700,34 +686,21 @@
         showNotification('Esegui prima un\'analisi per impostare la posizione', 'error');
         return;
       }
-
-      const hours = parseFloat(document.getElementById('no-find-hours').value) || 2;
-      const method = document.getElementById('no-find-method').value;
-      const thoroughness = parseInt(document.getElementById('no-find-thoroughness').value);
-      const habitat = document.getElementById('no-find-habitat').value.trim();
-      const notes = document.getElementById('no-find-notes').value.trim();
-
       const data = {
-        lat: currentLocation.lat,
-        lon: currentLocation.lon,
-        searched_hours: hours,
-        search_method: method,
-        search_thoroughness: thoroughness,
-        habitat_searched: habitat,
-        notes: notes
+        lat: currentLocation.lat, lon: currentLocation.lon,
+        searched_hours: parseFloat(document.getElementById('no-find-hours').value) || 2,
+        search_method: document.getElementById('no-find-method').value,
+        search_thoroughness: parseInt(document.getElementById('no-find-thoroughness').value),
+        habitat_searched: document.getElementById('no-find-habitat').value.trim(),
+        notes: document.getElementById('no-find-notes').value.trim()
       };
-
       setLoading(true);
       try {
         await reportNoFinding(data);
         showNotification('Report registrato con successo!');
-        
-        // Reset form
         document.getElementById('no-find-hours').value = '2';
         document.getElementById('no-find-habitat').value = '';
         document.getElementById('no-find-notes').value = '';
-        
-        // Update stats
         setTimeout(updateValidationStats, 1000);
       } catch (error) {
         showNotification(error.message, 'error');
@@ -735,24 +708,43 @@
         setLoading(false);
       }
     }
-
-    // === INITIALIZATION ===
+    
+    // === INIZIALIZZAZIONE MAPPA E EVENTI ===
     document.addEventListener('DOMContentLoaded', function() {
-      // Event listeners
+      // Inizializzazione Mappa Leaflet
+      map = L.map('map').setView([42.5, 12.5], 6); // Centro su Italia
+      L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+        attribution: 'Tiles &copy; Esri &mdash; Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, and the GIS User Community'
+      }).addTo(map);
+
+      // Event listener per il click sulla mappa
+      map.on('click', function(e) {
+        const { lat, lng } = e.latlng;
+        document.getElementById('lat').value = lat.toFixed(4);
+        document.getElementById('lon').value = lng.toFixed(4);
+        
+        if (mapMarker) {
+          mapMarker.setLatLng(e.latlng);
+        } else {
+          mapMarker = L.marker(e.latlng).addTo(map);
+        }
+        
+        showNotification('Coordinate selezionate dalla mappa. Clicca "Analizza".', 'success');
+        handleAnalysis(); // Avvia l'analisi automaticamente
+      });
+      
+      // Event listeners per i bottoni
       document.getElementById('btnGeo').addEventListener('click', handleGeocode);
       document.getElementById('btnRun').addEventListener('click', handleAnalysis);
       document.getElementById('btn-report-sighting').addEventListener('click', handleReportSighting);
       document.getElementById('btn-report-no-finding').addEventListener('click', handleReportNoFinding);
 
-      // Enter key support
       document.getElementById('q').addEventListener('keypress', function(e) {
         if (e.key === 'Enter') handleGeocode();
       });
 
-      // Load initial validation stats
       updateValidationStats();
 
-      // Set default location (Siena area)
       document.getElementById('lat').value = '43.3188';
       document.getElementById('lon').value = '11.3307';
     });
