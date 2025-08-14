@@ -1,14 +1,16 @@
-[build]
-  publish = "frontend"
+# netlify.toml - Codice Definitivo
 
-# Proxy API verso il backend Render
+[build]
+  base    = "frontend"
+  publish = "."
+  command = ""
+
 [[redirects]]
   from = "/api/*"
   to = "https://porcinicast-v25-api.onrender.com/api/:splat"
   status = 200
   force = true
 
-# Headers di sicurezza
 [[headers]]
   for = "/*"
   [headers.values]
@@ -17,10 +19,7 @@
     X-Content-Type-Options = "nosniff"
     Referrer-Policy = "strict-origin-when-cross-origin"
 
-# Cache ottimizzata
 [[headers]]
   for = "/api/*"
   [headers.values]
-
     Cache-Control = "public, max-age=300"
-
