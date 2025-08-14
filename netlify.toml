@@ -1,5 +1,5 @@
 [build]
-  publish = "frontend"
+  publish = "."
 
 # Proxy API verso il backend Render
 [[redirects]]
@@ -21,4 +21,5 @@
 [[headers]]
   for = "/api/*"
   [headers.values]
+
     Cache-Control = "public, max-age=300"
