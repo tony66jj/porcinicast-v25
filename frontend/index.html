@@ -818,7 +818,7 @@
         const pastTable = document.getElementById('rain-past-table');
         if (data.rain_past && Object.keys(data.rain_past).length > 0) {
           let html = '<table><tr><th>Data</th><th>Pioggia (mm)</th></tr>';
-          Object.entries(data.rain_past).reverse().slice(0, 7).forEach(([date, mm]) => {
+          Object.entries(data.rain_past).reverse().slice(0, 15).forEach(([date, mm]) => {
             html += `<tr><td>${formatDate(date)}</td><td>${mm}</td></tr>`;
           });
           html += '</table>';
@@ -1149,3 +1149,4 @@
   </script>
 </body>
 </html>
+
