@@ -1487,19 +1487,86 @@ async def api_score_super_advanced(
             habitat_used = "misto"
         
         # Process meteo data
-        if not om_data or "daily" not in om_data:
+       # Process meteo data (fallback: Open-Meteo SAFE → poi OpenWeather)
+if not om_data or "daily" not in om_data:
+    daily = None
+
+    # 1) Tentativo "safe" su Open-Meteo (senza models, variabili minime)
+    try:
+        import httpx
+        om_url = "https://api.open-meteo.com/v1/forecast"
+        past = 15
+        future = 10
+        params_safe = {
+            "latitude": lat,
+            "longitude": lon,
+            "timezone": "auto",
+            # variabili minime che OM accetta sempre
+            "daily": "precipitation_sum,temperature_2m_min,temperature_2m_max,relative_humidity_2m_mean",
+            "hourly": "temperature_2m,relative_humidity_2m,precipitation",
+            "past_days": past,
+            "forecast_days": future
+        }
+        async with httpx.AsyncClient(timeout=40, headers=HEADERS) as c:
+            r = await c.get(om_url, params=params_safe)
+            r.raise_for_status()
+            d2 = r.json()
+            if "daily" in d2:
+                daily = d2["daily"]
+    except Exception as e:
+        logger.warning(f"Open-Meteo safe fallback non riuscito: {e}")
+
+    # 2) Se OM safe non ha dato 'daily', prova OpenWeather
+    if daily is None:
+        if ow_data and "daily" in ow_data:
+            ow_daily = ow_data["daily"]
+
+            # timeline (epoch -> ISO date)
+            time_series = [
+                datetime.utcfromtimestamp(d["dt"]).date().isoformat() for d in ow_daily
+            ]
+            # precipitazioni mm/giorno
+            P_series = [float(d.get("rain", 0.0) or 0.0) for d in ow_daily]
+            # temperature
+            Tmin_series = [float(d["temp"]["min"]) for d in ow_daily]
+            Tmax_series = [float(d["temp"]["max"]) for d in ow_daily]
+            Tmean_series = [
+                float(d["temp"].get("day", (d["temp"]["min"] + d["temp"]["max"]) / 2.0))
+                for d in ow_daily
+            ]
+            # ET0 non disponibile su OW: usa neutro
+            ET0_series = [2.0] * len(ow_daily)
+            # umidità media %
+            RH_series = [float(d.get("humidity", 65.0)) for d in ow_daily]
+        else:
             raise HTTPException(500, "Errore dati meteorologici")
-        
-        daily = om_data["daily"]
+    else:
+        # OM safe riuscito: usa la struttura OM
         time_series = daily["time"]
-        
-        P_series = [float(x or 0.0) for x in daily["precipitation_sum"]]
-        Tmin_series = [float(x or 0.0) for x in daily["temperature_2m_min"]]
-        Tmax_series = [float(x or 0.0) for x in daily["temperature_2m_max"]]
-        Tmean_series = [float(x or 0.0) for x in daily["temperature_2m_mean"]]
+        P_series = [float(x or 0.0) for x in daily.get("precipitation_sum", [])]
+        Tmin_series = [float(x or 0.0) for x in daily.get("temperature_2m_min", [])]
+        Tmax_series = [float(x or 0.0) for x in daily.get("temperature_2m_max", [])]
+        # se manca la mean, ricava da min/max
+        if "temperature_2m_mean" in daily:
+            Tmean_series = [float(x or 0.0) for x in daily["temperature_2m_mean"]]
+        else:
+            Tmean_series = [(mn + mx) / 2.0 for mn, mx in zip(Tmin_series, Tmax_series)]
         ET0_series = daily.get("et0_fao_evapotranspiration", [2.0] * len(P_series))
         RH_series = daily.get("relative_humidity_2m_mean", [65.0] * len(P_series))
-        
+
+else:
+    # Open-Meteo (full) già ok
+    daily = om_data["daily"]
+    time_series = daily["time"]
+    P_series = [float(x or 0.0) for x in daily["precipitation_sum"]]
+    Tmin_series = [float(x or 0.0) for x in daily["temperature_2m_min"]]
+    Tmax_series = [float(x or 0.0) for x in daily["temperature_2m_max"]]
+    Tmean_series = [float(x or 0.0) for x in daily.get("temperature_2m_mean", [])]
+    if not Tmean_series:  # se mean assente, calcola da min/max
+        Tmean_series = [(mn + mx) / 2.0 for mn, mx in zip(Tmin_series, Tmax_series)]
+    ET0_series = daily.get("et0_fao_evapotranspiration", [2.0] * len(P_series))
+    RH_series = daily.get("relative_humidity_2m_mean", [65.0] * len(P_series))
+
         past_days = 15
         future_days = 10
         
@@ -1764,4 +1831,5 @@ async def api_score_super_advanced(
             "model_version": "2.5.0",
             "processing_time_ms": processing_time
         }
+
 
