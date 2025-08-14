@@ -1,0 +1,761 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Trova Porcini – Analisi v2.5.0</title>
+  <style>
+    :root{
+      --bg:#0b0d10; --panel:#12161b; --muted:#8aa0b6; --text:#e6eef6;
+      --accent:#62d5b4; --accent-2:#8bb7ff; --danger:#ff6b6b; --warn:#ffc857; --ok:#66e28a;
+      --shadow:0 8px 24px rgba(0,0,0,.35);
+      --radius:14px;
+    }
+    *{box-sizing:border-box}
+    html,body{margin:0;background:linear-gradient(180deg,#0a0c0f 0%,#0d1218 100%);color:var(--text);font:16px/1.5 system-ui,Segoe UI,Roboto,Helvetica,Arial,sans-serif}
+    a{color:var(--accent-2)}
+    .wrap{max-width:1200px;margin:32px auto;padding:0 16px}
+    header{display:flex;gap:16px;align-items:center;margin-bottom:18px;flex-wrap:wrap}
+    header h1{font-size:22px;margin:0}
+    header .badge{padding:4px 10px;border-radius:999px;background:linear-gradient(90deg,#1b2230,#17202b);color:#cfe6ff;border:1px solid #283343}
+    .panel{background:linear-gradient(180deg,#12161b,#0f141a);border:1px solid #1e2937;border-radius:var(--radius);box-shadow:var(--shadow)}
+    .panel h3{margin:0 0 8px 0;font-size:18px}
+    .controls{display:grid;grid-template-columns:1.1fr .8fr .8fr .8fr .8fr auto;gap:10px;align-items:end;padding:16px}
+    label{font-size:12px;color:var(--muted);display:block;margin-bottom:6px}
+    input[type=text],input[type=number],select{
+      width:100%;padding:10px 12px;border-radius:10px;border:1px solid #243142;background:#0d141b;color:var(--text)
+    }
+    .btn{padding:10px 14px;border-radius:12px;border:1px solid #2a384b;background:linear-gradient(180deg,#1b2430,#151c26);color:#e9f5ff;font-weight:600;cursor:pointer;transition:all 0.2s ease}
+    .btn:hover{transform:translateY(-1px);box-shadow:0 6px 16px rgba(0,0,0,.28)}
+    .btn.success{background:linear-gradient(180deg,#28a745,#1e7e34);border-color:#1e7e34}
+    .btn.secondary{background:linear-gradient(180deg,#6c757d,#545b62);border-color:#545b62}
+    .grid{display:grid;gap:14px;padding:16px}
+    .grid.g2{grid-template-columns:1fr 1fr}
+    .grid.g3{grid-template-columns:1.1fr .9fr .9fr}
+    .grid.g4{grid-template-columns:repeat(4,1fr)}
+    .metric{display:flex;gap:12px;align-items:center}
+    .metric .k{font-size:12px;color:var(--muted)}
+    .metric .v{font-size:22px;font-weight:700}
+    .chip{display:inline-flex;gap:8px;align-items:center;padding:6px 10px;border-radius:999px;border:1px solid #273244;background:#0f1520;color:#cfe6ff;font-size:12px}
+    .chip.ok{border-color:#224733;background:#0f1a14;color:#b9f3cf}
+    .chip.warn{border-color:#4a3b1a;background:#1a160f;color:#ffe0a3}
+    .chip.bad{border-color:#4a1a1a;background:#1a0f10;color:#ffb9b9}
+    .section{padding:16px}
+    .hr{height:1px;background:linear-gradient(90deg,transparent,#253244,transparent);margin:12px 0}
+    #chart{width:100%;height:160px;border-radius:12px;background:linear-gradient(180deg,#0c1015,#0b0f14);border:1px solid #1e2937}
+    table{width:100%;border-collapse:collapse;border:1px solid #232f40;border-radius:12px;overflow:hidden}
+    th,td{padding:8px 10px;border-bottom:1px solid #232f40;font-size:13px}
+    th{background:#131922;color:#b7c9dd;text-align:left}
+    tr:hover td{background:#0f141b}
+    .events ul{margin:6px 0 0 18px}
+    .events li{margin:2px 0}
+    details{background:#0e141b;border:1px solid #203045;border-radius:12px;padding:10px}
+    summary{cursor:pointer;font-weight:600}
+    .muted{color:#93a7bd}
+    .mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+    footer{margin:24px 0 40px;color:#8aa0b6;font-size:12px;text-align:center}
+    .confidence-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:8px;margin-top:8px}
+    .confidence-item{text-align:center;padding:8px;background:#0a0f14;border-radius:8px;border:1px solid #1e2937}
+    .confidence-label{font-size:10px;color:var(--muted);margin-bottom:4px}
+    .confidence-value{font-size:14px;font-weight:600}
+    
+    /* Stili migliorati per sezione crowdsource */
+    .crowdsource{
+      background:linear-gradient(135deg,#1a2332,#0f1419);
+      border:2px solid #2a4a3d;
+      margin-top:20px;
+      padding:20px!important;
+    }
+    .crowdsource h3{color:#66e28a;margin-bottom:16px;font-size:20px}
+    .crowdsource h4{color:var(--accent);margin:12px 0 8px 0;font-size:16px}
+    .input-group{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:12px}
+    .input-group input, .input-group select{flex:1;min-width:120px}
+    .input-group input[type="text"]{min-width:250px}
+    
+    .stats-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:12px}
+    .stat-item{text-align:center;padding:12px;background:#0a0f14;border-radius:10px;border:1px solid #1e2937}
+    .stat-value{font-size:20px;font-weight:700;color:var(--accent)}
+    .stat-label{font-size:11px;color:var(--muted);margin-top:4px}
+    .notification{position:fixed;top:20px;right:20px;padding:12px 16px;border-radius:8px;color:white;font-weight:600;z-index:1000;transform:translateX(400px);transition:transform 0.3s ease}
+    .notification.show{transform:translateX(0)}
+    .notification.success{background:#28a745}
+    .notification.error{background:#dc3545}
+    .version-badge{background:linear-gradient(45deg,#667eea,#764ba2);padding:3px 8px;border-radius:12px;font-size:11px;font-weight:600}
+    
+    /* Stili per analisi dettagliata */
+    .field-analysis{
+      background:#0a0f14;
+      border-radius:12px;
+      padding:16px;
+      margin-top:12px;
+      line-height:1.7;
+    }
+    .field-analysis h4{
+      color:var(--accent);
+      margin:20px 0 12px 0;
+      font-size:16px;
+      border-bottom:1px solid #1e2937;
+      padding-bottom:8px;
+    }
+    .field-analysis h4:first-child{margin-top:0}
+    .field-analysis p{margin:8px 0;color:#d8e3f0}
+    .field-analysis em{color:var(--muted);font-style:italic}
+    .field-analysis strong{color:#fff;font-weight:600}
+    .return-advice{
+      background:linear-gradient(135deg,#1a2a3e,#0f1925);
+      border-left:4px solid var(--accent);
+      padding:12px;
+      border-radius:8px;
+      margin:16px 0!important;
+    }
+    .loading{opacity:0.6;pointer-events:none}
+    .hidden{display:none}
+    
+    @media (max-width: 768px) {
+      .controls{grid-template-columns:1fr;gap:8px}
+      .grid.g3{grid-template-columns:1fr}
+      .grid.g4{grid-template-columns:1fr 1fr}
+      .input-group{flex-direction:column;align-items:stretch}
+      .crowdsource .grid.g2{grid-template-columns:1fr}
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <h1>🍄 Trova Porcini — Analisi Scientifica Avanzata</h1>
+      <span class="badge version-badge">v2.5.0</span>
+      <span class="badge">Lag Biologico Dinamico</span>
+    </header>
+
+    <!-- Controls -->
+    <div class="panel">
+      <div class="controls">
+        <div>
+          <label>Località (geocoding)</label>
+          <input id="q" type="text" placeholder="Es. Abbadia San Salvatore" />
+        </div>
+        <div>
+          <label>Latitudine</label>
+          <input id="lat" type="number" step="0.0001" placeholder="42.88" />
+        </div>
+        <div>
+          <label>Longitudine</label>
+          <input id="lon" type="number" step="0.0001" placeholder="11.63" />
+        </div>
+        <div>
+          <label>Habitat</label>
+          <select id="habitat">
+            <option value="">(auto da OSM)</option>
+            <option>castagno</option><option>faggio</option><option>quercia</option>
+            <option>conifere</option><option>misto</option><option>altro</option>
+          </select>
+        </div>
+        <div>
+          <label>Ore sul campo</label>
+          <select id="hours">
+            <option>2</option><option selected>4</option><option>6</option><option>8</option>
+          </select>
+        </div>
+        <div style="display:flex;gap:8px;">
+          <button id="btnGeo" class="btn" title="Cerca">🔎 Cerca</button>
+          <button id="btnRun" class="btn" title="Analizza">📈 Analizza</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- KPIs Principali -->
+    <div class="grid g3">
+      <div class="panel section">
+        <h3>🎯 Indice Oggi</h3>
+        <div class="metric"><div class="k">Forza flush</div><div id="k-index" class="v">—</div></div>
+        <div class="hr"></div>
+        <div class="metric"><div class="k">Finestra migliore</div><div id="k-window" class="v">—</div></div>
+        <div style="margin-top:8px;">
+          <span id="k-model-version" class="chip">v2.5.0</span>
+          <span id="k-has-validations" class="chip">validazioni: —</span>
+        </div>
+      </div>
+      
+      <div class="panel section">
+        <h3>🔬 Affidabilità 5D</h3>
+        <div class="confidence-grid">
+          <div class="confidence-item">
+            <div class="confidence-label">Meteo</div>
+            <div id="conf-met" class="confidence-value">—</div>
+          </div>
+          <div class="confidence-item">
+            <div class="confidence-label">Eco</div>
+            <div id="conf-eco" class="confidence-value">—</div>
+          </div>
+          <div class="confidence-item">
+            <div class="confidence-label">Hydro</div>
+            <div id="conf-hydro" class="confidence-value">—</div>
+          </div>
+          <div class="confidence-item">
+            <div class="confidence-label">Atmo</div>
+            <div id="conf-atmo" class="confidence-value">—</div>
+          </div>
+          <div class="confidence-item">
+            <div class="confidence-label">Emp</div>
+            <div id="conf-emp" class="confidence-value">—</div>
+          </div>
+        </div>
+        <div class="hr"></div>
+        <div class="metric">
+          <div class="k">Overall</div>
+          <div id="conf-overall" class="v" style="color:var(--accent)">—</div>
+        </div>
+      </div>
+      
+      <div class="panel section">
+        <h3>🍄 Dimensioni & Raccolto</h3>
+        <div class="metric"><div class="k">Taglia media</div><div id="k-size" class="v">—</div></div>
+        <div class="metric"><div class="k">Range</div><div id="k-size-range" class="v">—</div></div>
+        <div class="hr"></div>
+        <div class="metric"><div class="k">Raccolto atteso</div><div id="k-harvest" class="v" style="font-size:18px">—</div></div>
+        <div class="muted" id="k-harvest-note" style="font-size:11px;margin-top:4px"></div>
+      </div>
+    </div>
+
+    <!-- Forecast chart -->
+    <div class="panel section">
+      <h3>📈 Previsione Prossimi 10 Giorni (Lag Biologico Dinamico)</h3>
+      <div style="margin-bottom:8px;color:var(--muted);font-size:12px;">
+        ✨ <strong>v2.5:</strong> Lag biologico basato su Boddy et al. (2014) • Soglie adattive • Confidence 5D • Savitzky-Golay
+      </div>
+      <canvas id="chart"></canvas>
+    </div>
+
+    <!-- Analisi dettagliata campo -->
+    <div class="panel section">
+      <h3>🧭 Analisi Dettagliata e Consigli Scientifici</h3>
+      <div id="field-analysis" class="field-analysis">
+        <p class="muted">Esegui un'analisi per vedere i dettagli scientifici e le raccomandazioni personalizzate.</p>
+      </div>
+    </div>
+
+    <!-- Dati Meteo -->
+    <div class="panel section">
+      <h3>🌧️ Dati Meteorologici e Eventi Piovosi</h3>
+      <div class="grid g2">
+        <div>
+          <h4>📊 Ultimi 15 giorni</h4>
+          <div id="rain-past-table">
+            <p class="muted">In attesa di analisi...</p>
+          </div>
+        </div>
+        <div>
+          <h4>🔮 Prossimi 10 giorni</h4>
+          <div id="rain-future-table">
+            <p class="muted">In attesa di analisi...</p>
+          </div>
+        </div>
+      </div>
+      <div style="margin-top:16px;">
+        <h4>💧 Eventi di Flush Rilevati</h4>
+        <div id="flush-events" class="events">
+          <p class="muted">In attesa di analisi...</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Crowd-sourcing Section -->
+    <div class="panel section crowdsource">
+      <h3>🧬 Contribuisci alla Ricerca Scientifica</h3>
+      <p style="margin-bottom:20px;color:#cfe6ff;">Aiuta a migliorare il modello fenologico condividendo le tue osservazioni sul campo. I tuoi dati vengono utilizzati per calibrare l'algoritmo di previsione.</p>
+      
+      <div class="grid g2">
+        <div>
+          <h4>✅ Segnala Ritrovamento</h4>
+          <div class="input-group">
+            <select id="sighting-species">
+              <option>aereus</option><option>reticulatus</option><option>edulis</option><option>pinophilus</option><option>altro</option>
+            </select>
+            <input type="number" id="sighting-quantity" placeholder="Quantità" min="1" max="50" value="1">
+            <input type="number" id="sighting-size" placeholder="Taglia media (cm)" min="2" max="20" step="0.5">
+          </div>
+          <div class="input-group">
+            <input type="text" id="sighting-habitat" placeholder="Habitat osservato (es. faggio misto)">
+            <select id="sighting-confidence">
+              <option value="0.9">Molto sicuro</option><option value="0.8" selected>Sicuro</option><option value="0.6">Abbastanza sicuro</option><option value="0.4">Incerto</option>
+            </select>
+          </div>
+          <div class="input-group">
+            <input type="text" id="sighting-notes" placeholder="Note aggiuntive (opzionale)">
+            <button id="btn-report-sighting" class="btn success">📍 Segnala</button>
+          </div>
+        </div>
+        
+        <div>
+          <h4>❌ Segnala Ricerca Vuota</h4>
+          <div class="input-group">
+            <input type="number" id="no-find-hours" placeholder="Ore cercate" min="0.5" max="12" step="0.5" value="2">
+            <select id="no-find-method">
+              <option>visual</option><option>systematic</option><option>random</option>
+            </select>
+            <select id="no-find-thoroughness">
+              <option value="1">Superficiale</option><option value="2">Normale</option><option value="3" selected>Accurata</option><option value="4">Molto accurata</option><option value="5">Sistematica</option>
+            </select>
+          </div>
+          <div class="input-group">
+            <input type="text" id="no-find-habitat" placeholder="Habitat cercato">
+            <input type="text" id="no-find-notes" placeholder="Note (condizioni, meteo, ecc.)">
+            <button id="btn-report-no-finding" class="btn secondary">🔍 Segnala</button>
+          </div>
+        </div>
+      </div>
+      
+      <div style="margin-top:24px;">
+        <h4>📈 Statistiche Validazioni</h4>
+        <div id="validation-stats" class="stats-grid">
+          <div class="stat-item"><div class="stat-value">—</div><div class="stat-label">Segnalazioni positive</div></div>
+          <div class="stat-item"><div class="stat-value">—</div><div class="stat-label">Ricerche negative</div></div>
+          <div class="stat-item"><div class="stat-value">—</div><div class="stat-label">Predizioni totali</div></div>
+          <div class="stat-item"><div class="stat-value">—</div><div class="stat-label">Accuratezza media</div></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Footer -->
+    <footer>
+      <p>🍄 <strong>PorciniCast v2.5.0</strong> — Modello fenologico scientifico per previsione fruttificazione <em>Boletus</em> spp.</p>
+      <p>Basato su letteratura peer-reviewed: Boddy & Heilmann-Clausen (2014), Büntgen et al. (2012), Kauserud et al. (2010)</p>
+      <p>Sviluppato con FastAPI • NumPy/SciPy • SQLite • Docker • Crowd-sourcing ML-ready</p>
+    </footer>
+  </div>
+
+  <!-- Notification container -->
+  <div id="notification" class="notification"></div>
+
+  <!-- Chart.js per i grafici -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.min.js"></script>
+
+  <script>
+    // === CONFIGURAZIONE ===
+    const API_BASE = window.location.hostname === 'localhost' ? 'http://localhost:8787' : '';
+    
+    let currentChart = null;
+    let currentLocation = { lat: null, lon: null };
+
+    // === UTILITIES ===
+    function showNotification(message, type = 'success') {
+      const notification = document.getElementById('notification');
+      notification.textContent = message;
+      notification.className = `notification ${type} show`;
+      setTimeout(() => {
+        notification.classList.remove('show');
+      }, 4000);
+    }
+
+    function setLoading(isLoading) {
+      document.body.classList.toggle('loading', isLoading);
+    }
+
+    function formatDate(dateStr) {
+      try {
+        return new Date(dateStr).toLocaleDateString('it-IT', { 
+          month: 'short', day: 'numeric' 
+        });
+      } catch {
+        return dateStr;
+      }
+    }
+
+    // === API CALLS ===
+    async function geocodeLocation(query) {
+      try {
+        const response = await fetch(`${API_BASE}/api/geocode?q=${encodeURIComponent(query)}`);
+        if (!response.ok) throw new Error('Geocoding fallito');
+        return await response.json();
+      } catch (error) {
+        throw new Error(`Errore geocoding: ${error.message}`);
+      }
+    }
+
+    async function getAnalysis(lat, lon, habitat = '', hours = 4) {
+      try {
+        const params = new URLSearchParams({
+          lat: lat.toString(),
+          lon: lon.toString(),
+          habitat: habitat,
+          hours: hours.toString(),
+          autohabitat: habitat ? '0' : '1'
+        });
+        
+        const response = await fetch(`${API_BASE}/api/score?${params}`);
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        return await response.json();
+      } catch (error) {
+        throw new Error(`Errore analisi: ${error.message}`);
+      }
+    }
+
+    async function reportSighting(data) {
+      try {
+        const response = await fetch(`${API_BASE}/api/report-sighting`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          body: new URLSearchParams(data)
+        });
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        return await response.json();
+      } catch (error) {
+        throw new Error(`Errore segnalazione: ${error.message}`);
+      }
+    }
+
+    async function reportNoFinding(data) {
+      try {
+        const response = await fetch(`${API_BASE}/api/report-no-findings`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          body: new URLSearchParams(data)
+        });
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        return await response.json();
+      } catch (error) {
+        throw new Error(`Errore report: ${error.message}`);
+      }
+    }
+
+    async function getValidationStats() {
+      try {
+        const response = await fetch(`${API_BASE}/api/validation-stats`);
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        return await response.json();
+      } catch (error) {
+        console.warn('Errore stats validazione:', error);
+        return { error: error.message };
+      }
+    }
+
+    // === UI UPDATES ===
+    function updateKPIs(data) {
+      document.getElementById('k-index').textContent = `${data.index}/100`;
+      
+      const bestWindow = data.best_window;
+      if (bestWindow && bestWindow.mean > 0) {
+        document.getElementById('k-window').textContent = `Giorni ${bestWindow.start + 1}-${bestWindow.end + 1}`;
+      } else {
+        document.getElementById('k-window').textContent = 'Nessuna';
+      }
+
+      // Confidence 5D
+      const conf = data.confidence_detailed;
+      if (conf) {
+        document.getElementById('conf-met').textContent = conf.meteorological?.toFixed(2) || '—';
+        document.getElementById('conf-eco').textContent = conf.ecological?.toFixed(2) || '—';
+        document.getElementById('conf-hydro').textContent = conf.hydrological?.toFixed(2) || '—';
+        document.getElementById('conf-atmo').textContent = conf.atmospheric?.toFixed(2) || '—';
+        document.getElementById('conf-emp').textContent = conf.empirical?.toFixed(2) || '—';
+        document.getElementById('conf-overall').textContent = conf.overall?.toFixed(2) || '—';
+      }
+
+      // Harvest & Size
+      document.getElementById('k-harvest').textContent = data.harvest_estimate || '—';
+      document.getElementById('k-harvest-note').textContent = data.harvest_note || '';
+      document.getElementById('k-size').textContent = data.size_cm ? `${data.size_cm} cm` : '—';
+      document.getElementById('k-size-range').textContent = data.size_range_cm ? 
+        `${data.size_range_cm[0]}-${data.size_range_cm[1]} cm` : '—';
+
+      // Validations
+      const hasValidations = data.has_local_validations ? 'Sì' : 'No';
+      document.getElementById('k-has-validations').textContent = `validazioni: ${hasValidations}`;
+    }
+
+    function updateChart(forecast) {
+      const ctx = document.getElementById('chart').getContext('2d');
+      
+      if (currentChart) {
+        currentChart.destroy();
+      }
+
+      const labels = forecast.map((_, i) => `Giorno ${i + 1}`);
+      
+      currentChart = new Chart(ctx, {
+        type: 'line',
+        data: {
+          labels: labels,
+          datasets: [{
+            label: 'Indice Fruttificazione',
+            data: forecast,
+            borderColor: '#62d5b4',
+            backgroundColor: 'rgba(98, 213, 180, 0.1)',
+            borderWidth: 3,
+            fill: true,
+            tension: 0.4,
+            pointBackgroundColor: '#62d5b4',
+            pointBorderColor: '#ffffff',
+            pointBorderWidth: 2,
+            pointRadius: 6
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: { display: false }
+          },
+          scales: {
+            y: {
+              beginAtZero: true,
+              max: 100,
+              grid: { color: 'rgba(255,255,255,0.1)' },
+              ticks: { color: '#8aa0b6' }
+            },
+            x: {
+              grid: { color: 'rgba(255,255,255,0.1)' },
+              ticks: { color: '#8aa0b6' }
+            }
+          },
+          elements: {
+            point: {
+              hoverRadius: 8
+            }
+          }
+        }
+      });
+    }
+
+    function updateRainTables(data) {
+      // Past rain table
+      const pastTable = document.getElementById('rain-past-table');
+      if (data.rain_past && Object.keys(data.rain_past).length > 0) {
+        let html = '<table><tr><th>Data</th><th>Pioggia (mm)</th></tr>';
+        Object.entries(data.rain_past).reverse().slice(0, 7).forEach(([date, mm]) => {
+          html += `<tr><td>${formatDate(date)}</td><td>${mm}</td></tr>`;
+        });
+        html += '</table>';
+        pastTable.innerHTML = html;
+      } else {
+        pastTable.innerHTML = '<p class="muted">Dati non disponibili</p>';
+      }
+
+      // Future rain table
+      const futureTable = document.getElementById('rain-future-table');
+      if (data.rain_future && Object.keys(data.rain_future).length > 0) {
+        let html = '<table><tr><th>Data</th><th>Pioggia (mm)</th></tr>';
+        Object.entries(data.rain_future).forEach(([date, mm]) => {
+          html += `<tr><td>${formatDate(date)}</td><td>${mm}</td></tr>`;
+        });
+        html += '</table>';
+        futureTable.innerHTML = html;
+      } else {
+        futureTable.innerHTML = '<p class="muted">Dati non disponibili</p>';
+      }
+    }
+
+    function updateFlushEvents(data) {
+      const eventsDiv = document.getElementById('flush-events');
+      
+      if (data.flush_events && data.flush_events.length > 0) {
+        let html = '<ul>';
+        data.flush_events.slice(0, 5).forEach(event => {
+          const obsText = event.observed ? '📊 Osservato' : '🔮 Previsto';
+          html += `<li><strong>${event.event_when}</strong>: ${event.event_mm}mm → flush ~${event.lag_days} giorni (${obsText})</li>`;
+        });
+        html += '</ul>';
+        eventsDiv.innerHTML = html;
+      } else {
+        eventsDiv.innerHTML = '<p class="muted">Nessun evento significativo rilevato</p>';
+      }
+    }
+
+    function updateFieldAnalysis(data) {
+      const analysisDiv = document.getElementById('field-analysis');
+      if (data.dynamic_explanation) {
+        analysisDiv.innerHTML = data.dynamic_explanation;
+      } else {
+        analysisDiv.innerHTML = '<p class="muted">Analisi dettagliata non disponibile</p>';
+      }
+    }
+
+    async function updateValidationStats() {
+      try {
+        const stats = await getValidationStats();
+        const statsDiv = document.getElementById('validation-stats');
+        
+        if (stats.error) {
+          statsDiv.innerHTML = '<div class="stat-item"><div class="stat-value">—</div><div class="stat-label">Errore caricamento</div></div>';
+          return;
+        }
+
+        statsDiv.innerHTML = `
+          <div class="stat-item"><div class="stat-value">${stats.positive_sightings || 0}</div><div class="stat-label">Segnalazioni positive</div></div>
+          <div class="stat-item"><div class="stat-value">${stats.negative_reports || 0}</div><div class="stat-label">Ricerche negative</div></div>
+          <div class="stat-item"><div class="stat-value">${stats.predictions_logged || 0}</div><div class="stat-label">Predizioni totali</div></div>
+          <div class="stat-item"><div class="stat-value">${stats.avg_confidence || 0}</div><div class="stat-label">Accuratezza media</div></div>
+        `;
+      } catch (error) {
+        console.warn('Errore aggiornamento stats:', error);
+      }
+    }
+
+    // === EVENT HANDLERS ===
+    async function handleGeocode() {
+      const query = document.getElementById('q').value.trim();
+      if (!query) {
+        showNotification('Inserisci una località da cercare', 'error');
+        return;
+      }
+
+      setLoading(true);
+      try {
+        const result = await geocodeLocation(query);
+        document.getElementById('lat').value = result.lat.toFixed(4);
+        document.getElementById('lon').value = result.lon.toFixed(4);
+        currentLocation = { lat: result.lat, lon: result.lon };
+        showNotification(`Trovato: ${result.display}`);
+      } catch (error) {
+        showNotification(error.message, 'error');
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    async function handleAnalysis() {
+      const lat = parseFloat(document.getElementById('lat').value);
+      const lon = parseFloat(document.getElementById('lon').value);
+      const habitat = document.getElementById('habitat').value;
+      const hours = parseInt(document.getElementById('hours').value);
+
+      if (!lat || !lon || isNaN(lat) || isNaN(lon)) {
+        showNotification('Inserisci coordinate valide o usa il geocoding', 'error');
+        return;
+      }
+
+      if (lat < 35 || lat > 47 || lon < 6 || lon > 19) {
+        showNotification('Coordinate fuori dall\'area Italia', 'error');
+        return;
+      }
+
+      currentLocation = { lat, lon };
+      setLoading(true);
+
+      try {
+        const data = await getAnalysis(lat, lon, habitat, hours);
+        
+        updateKPIs(data);
+        updateChart(data.forecast || []);
+        updateRainTables(data);
+        updateFlushEvents(data);
+        updateFieldAnalysis(data);
+        
+        showNotification(`Analisi completata: ${data.index}/100 per ${data.species}`);
+      } catch (error) {
+        showNotification(error.message, 'error');
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    async function handleReportSighting() {
+      if (!currentLocation.lat || !currentLocation.lon) {
+        showNotification('Esegui prima un\'analisi per impostare la posizione', 'error');
+        return;
+      }
+
+      const species = document.getElementById('sighting-species').value;
+      const quantity = parseInt(document.getElementById('sighting-quantity').value) || 1;
+      const size = parseFloat(document.getElementById('sighting-size').value) || null;
+      const habitat = document.getElementById('sighting-habitat').value.trim();
+      const confidence = parseFloat(document.getElementById('sighting-confidence').value);
+      const notes = document.getElementById('sighting-notes').value.trim();
+
+      const data = {
+        lat: currentLocation.lat,
+        lon: currentLocation.lon,
+        species: species,
+        quantity: quantity,
+        confidence: confidence,
+        notes: notes,
+        habitat_observed: habitat
+      };
+
+      if (size) data.size_cm_avg = size;
+
+      setLoading(true);
+      try {
+        await reportSighting(data);
+        showNotification('Segnalazione registrata con successo!');
+        
+        // Reset form
+        document.getElementById('sighting-quantity').value = '1';
+        document.getElementById('sighting-size').value = '';
+        document.getElementById('sighting-habitat').value = '';
+        document.getElementById('sighting-notes').value = '';
+        
+        // Update stats
+        setTimeout(updateValidationStats, 1000);
+      } catch (error) {
+        showNotification(error.message, 'error');
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    async function handleReportNoFinding() {
+      if (!currentLocation.lat || !currentLocation.lon) {
+        showNotification('Esegui prima un\'analisi per impostare la posizione', 'error');
+        return;
+      }
+
+      const hours = parseFloat(document.getElementById('no-find-hours').value) || 2;
+      const method = document.getElementById('no-find-method').value;
+      const thoroughness = parseInt(document.getElementById('no-find-thoroughness').value);
+      const habitat = document.getElementById('no-find-habitat').value.trim();
+      const notes = document.getElementById('no-find-notes').value.trim();
+
+      const data = {
+        lat: currentLocation.lat,
+        lon: currentLocation.lon,
+        searched_hours: hours,
+        search_method: method,
+        search_thoroughness: thoroughness,
+        habitat_searched: habitat,
+        notes: notes
+      };
+
+      setLoading(true);
+      try {
+        await reportNoFinding(data);
+        showNotification('Report registrato con successo!');
+        
+        // Reset form
+        document.getElementById('no-find-hours').value = '2';
+        document.getElementById('no-find-habitat').value = '';
+        document.getElementById('no-find-notes').value = '';
+        
+        // Update stats
+        setTimeout(updateValidationStats, 1000);
+      } catch (error) {
+        showNotification(error.message, 'error');
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    // === INITIALIZATION ===
+    document.addEventListener('DOMContentLoaded', function() {
+      // Event listeners
+      document.getElementById('btnGeo').addEventListener('click', handleGeocode);
+      document.getElementById('btnRun').addEventListener('click', handleAnalysis);
+      document.getElementById('btn-report-sighting').addEventListener('click', handleReportSighting);
+      document.getElementById('btn-report-no-finding').addEventListener('click', handleReportNoFinding);
+
+      // Enter key support
+      document.getElementById('q').addEventListener('keypress', function(e) {
+        if (e.key === 'Enter') handleGeocode();
+      });
+
+      // Load initial validation stats
+      updateValidationStats();
+
+      // Set default location (Siena area)
+      document.getElementById('lat').value = '43.3188';
+      document.getElementById('lon').value = '11.3307';
+    });
+  </script>
+</body>
+</html>
