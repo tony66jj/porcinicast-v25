@@ -45,7 +45,7 @@
     .chip.bad{border-color:#4a1a1a;background:#1a0f10;color:#ffb9b9}
     .section{padding:16px}
     .hr{height:1px;background:linear-gradient(90deg,transparent,#253244,transparent);margin:12px 0}
-    #chart{width:100%;height:160px;border-radius:12px;background:linear-gradient(180deg,#0c1015,#0b0f14);border:1px solid #1e2937}
+    #chart{width:100%;height:140px;border-radius:12px;background:linear-gradient(180deg,#0c1015,#0b0f14);border:1px solid #1e2937;max-width:100%;overflow:hidden}
     table{width:100%;border-collapse:collapse;border:1px solid #232f40;border-radius:12px;overflow:hidden}
     th,td{padding:8px 10px;border-bottom:1px solid #232f40;font-size:13px}
     th{background:#131922;color:#b7c9dd;text-align:left}
@@ -63,12 +63,14 @@
     .confidence-value{font-size:14px;font-weight:600}
     
     #map {
-      height: 450px;
+      height: 350px;
       width: 100%;
+      max-width: 100%;
       border-radius: var(--radius);
       border: 1px solid #1e2937;
       box-shadow: var(--shadow);
       cursor: pointer;
+      overflow: hidden;
     }
     
     .crowdsource{
@@ -149,6 +151,8 @@
       .grid.g4{grid-template-columns:1fr 1fr}
       .input-group{flex-direction:column;align-items:stretch}
       .crowdsource .grid.g2{grid-template-columns:1fr}
+      #map{height:280px}
+      #chart{height:120px}
     }
   </style>
 </head>
@@ -584,7 +588,7 @@
         
         const labels = forecast.map((_, i) => `Giorno ${i + 1}`);
         
-        // CHART.JS v3.9.1 SYNTAX
+        // CHART.JS v3.9.1 SYNTAX - PERFORMANCE OPTIMIZED
         currentChart = new Chart(ctx, {
           type: 'line',
           data: {
@@ -594,18 +598,23 @@
               data: forecast,
               borderColor: '#62d5b4',
               backgroundColor: 'rgba(98, 213, 180, 0.1)',
-              borderWidth: 3,
+              borderWidth: 2,
               fill: true,
-              tension: 0.4,
+              tension: 0.3,
               pointBackgroundColor: '#62d5b4',
               pointBorderColor: '#ffffff',
-              pointBorderWidth: 2,
-              pointRadius: 6
+              pointBorderWidth: 1,
+              pointRadius: 4,
+              pointHoverRadius: 6
             }]
           },
           options: {
             responsive: true,
             maintainAspectRatio: false,
+            animation: {
+              duration: 800,
+              easing: 'easeInOutQuart'
+            },
             plugins: { 
               legend: { display: false }
             },
@@ -613,16 +622,21 @@
               y: { 
                 beginAtZero: true, 
                 max: 100, 
-                grid: { color: 'rgba(255,255,255,0.1)' }, 
-                ticks: { color: '#8aa0b6' } 
+                grid: { color: 'rgba(255,255,255,0.08)' }, 
+                ticks: { color: '#8aa0b6', font: { size: 11 } }
               },
               x: { 
-                grid: { color: 'rgba(255,255,255,0.1)' }, 
-                ticks: { color: '#8aa0b6' } 
+                grid: { color: 'rgba(255,255,255,0.08)' }, 
+                ticks: { color: '#8aa0b6', font: { size: 11 } }
               }
             },
             elements: { 
-              point: { hoverRadius: 8 } 
+              point: { hoverRadius: 6 },
+              line: { borderJoinStyle: 'round' }
+            },
+            interaction: {
+              intersect: false,
+              mode: 'index'
             }
           }
         });
