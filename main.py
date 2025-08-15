@@ -1549,6 +1549,9 @@ async def api_score_hybrid_weather(
         Tmean_past = Tmean_series[:past_days]
         Tmean_future = Tmean_series[past_days:past_days + future_days]
         Tmin_past = Tmin_series[:past_days]
+        Tmax_past = Tmax_series[:past_days]
+        Tmin_future = Tmin_series[past_days:past_days + future_days] if past_days + future_days <= len(Tmin_series) else Tmin_series[past_days:] + [0.0] * (future_days - (len(Tmin_series) - past_days))
+        Tmax_future = Tmax_series[past_days:past_days + future_days] if past_days + future_days <= len(Tmax_series) else Tmax_series[past_days:] + [0.0] * (future_days - (len(Tmax_series) - past_days))
         RH_past = RH_series[:past_days]
         RH_future = RH_series[past_days:past_days + future_days]
         
@@ -1716,8 +1719,8 @@ async def api_score_hybrid_weather(
             date_key = time_series[past_days + i] if past_days + i < len(time_series) else f"+{i+1}d"
             weather_future_table[date_key] = {
                 "precipitation_mm": round(P_future[i], 1),
-                "temp_min": round(Tmin_series[past_days + i], 1) if past_days + i < len(Tmin_series) else 0.0,
-                "temp_max": round(Tmax_series[past_days + i], 1) if past_days + i < len(Tmax_series) else 0.0,
+                "temp_min": round(Tmin_future[i], 1) if i < len(Tmin_future) else 0.0,
+                "temp_max": round(Tmax_future[i], 1) if i < len(Tmax_future) else 0.0,
                 "temp_mean": round(Tmean_future[i], 1)
             }
         
