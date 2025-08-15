@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>PorciniCast v2.5.7 – Sistema Meteorologico Ibrido</title>
+  <title>BoletusLab® – Sistema Previsionale Micologico</title>
   
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
   
@@ -23,7 +23,7 @@
     header .badge{padding:4px 10px;border-radius:999px;background:linear-gradient(90deg,#1b2230,#17202b);color:#cfe6ff;border:1px solid #283343}
     .panel{background:linear-gradient(180deg,#12161b,#0f141a);border:1px solid #1e2937;border-radius:var(--radius);box-shadow:var(--shadow); margin-bottom: 20px;}
     .panel h3{margin:0 0 8px 0;font-size:18px}
-    .controls{display:grid;grid-template-columns:1.1fr .8fr .8fr .8fr .8fr auto;gap:10px;align-items:end;padding:16px}
+            .controls{display:grid;grid-template-columns:1.1fr .8fr .8fr .8fr .9fr .8fr auto;gap:10px;align-items:end;padding:16px}
     label{font-size:12px;color:var(--muted);display:block;margin-bottom:6px}
     input[type=text],input[type=number],select{
       width:100%;padding:10px 12px;border-radius:10px;border:1px solid #243142;background:#0d141b;color:var(--text)
@@ -179,10 +179,10 @@
 <body>
   <div class="wrap">
     <header>
-      <h1>🍄 PorciniCast – Sistema Meteorologico Ibrido</h1>
+      <h1>🍄 BoletusLab® – Sistema Previsionale Micologico</h1>
       <span class="badge version-badge">v2.5.7</span>
-      <span class="badge scientific-badge">Visual Crossing + Open-Meteo</span>
-      <span class="badge">Dati Completi 15 Giorni</span>
+      <span class="badge scientific-badge">Algoritmi Scientifici Boletus spp.</span>
+      <span class="badge">Previsione Fruttificazione</span>
     </header>
 
     <div class="panel">
@@ -208,6 +208,24 @@
           </select>
         </div>
         <div>
+          <label>Esposizione</label>
+          <select id="aspect-mode">
+            <option value="auto">Automatico DEM</option>
+            <option value="manual">Manuale</option>
+          </select>
+          <select id="aspect-octant" style="display:none;margin-top:4px;">
+            <option value="">Seleziona...</option>
+            <option value="N">Nord (N)</option>
+            <option value="NE">Nord-Est (NE)</option>
+            <option value="E">Est (E)</option>
+            <option value="SE">Sud-Est (SE)</option>
+            <option value="S">Sud (S)</option>
+            <option value="SW">Sud-Ovest (SW)</option>
+            <option value="W">Ovest (W)</option>
+            <option value="NW">Nord-Ovest (NW)</option>
+          </select>
+        </div>
+        <div>
           <label>Ore sul campo</label>
           <select id="hours">
             <option>2</option><option selected>4</option><option>6</option><option>8</option>
@@ -215,7 +233,6 @@
         </div>
         <div style="display:flex;gap:8px;">
           <button id="btnGeo" class="btn" title="Cerca">🔍 Cerca</button>
-          <button id="btnRun" class="btn" title="Analizza">📈 Analizza</button>
         </div>
       </div>
     </div>
@@ -280,7 +297,7 @@
     <div class="panel section">
       <h3>📈 Previsione Prossimi 10 Giorni (Step-Function Scientifica)</h3>
       <div style="margin-bottom:8px;color:var(--muted);font-size:12px;">
-        ✨ <strong>v2.5.7:</strong> Sistema ibrido Visual Crossing + Open-Meteo • Lag specie-specifico • Umidità cumulativa • Esposizione corretta
+        ✨ <strong>BoletusLab v2.5.7:</strong> Lag specie-specifico • Umidità cumulativa • Esposizione corretta • Algoritmi scientifici Boletus spp.
       </div>
       <div class="lag-explanation" id="lag-explanation" style="display:none;">
         💡 <strong>Fruttificazione Step-Function:</strong> Basato su letteratura scientifica - i funghi appaiono improvvisamente "tutto o niente" dopo lag biologico specie-specifico.
@@ -296,7 +313,7 @@
     <div class="panel section">
       <h3>🧭 Analisi Scientifica Dettagliata v2.5.7</h3>
       <div id="field-analysis" class="field-analysis">
-        <p class="muted">Esegui un'analisi per vedere i dettagli scientifici con sistema meteorologico ibrido.</p>
+        <p class="muted">Esegui un'analisi per vedere i dettagli scientifici con algoritmi BoletusLab.</p>
       </div>
     </div>
 
@@ -330,7 +347,7 @@
 
     <div class="panel section crowdsource">
       <h3>🧬 Contribuisci alla Ricerca Scientifica</h3>
-      <p style="margin-bottom:20px;color:#cfe6ff;">Aiuta a perfezionare il modello ibrido condividendo le tue osservazioni. I dati alimentano l'algoritmo di machine learning per migliorare la previsione della fruttificazione fungina.</p>
+      <p style="margin-bottom:20px;color:#cfe6ff;">Aiuta a perfezionare gli algoritmi BoletusLab condividendo le tue osservazioni. I dati alimentano l'algoritmo di machine learning per migliorare la previsione della fruttificazione fungina.</p>
       
       <div class="grid g2">
         <div>
@@ -385,10 +402,15 @@
     </div>
 
     <footer>
-      <p>🍄 <strong>PorciniCast v2.5.7</strong> – Sistema meteorologico ibrido per previsione fruttificazione <em>Boletus</em> spp.</p>
-      <p>Innovazioni: Visual Crossing + Open-Meteo • Lag biologico specie-specifico • Umidità cumulativa • Step-function fruttificazione</p>
-      <p>Basato su letteratura peer-reviewed: Viitanen (1997), Frontiers Soil Science (2023), ScienceDirect (2017)</p>
-      <p><strong>Sviluppato da Antonio Pio D'Aloia</strong> • FastAPI • NumPy/SciPy • SQLite • Docker • Crowd-sourcing ML-ready • Mappa Interattiva Leaflet.js</p>
+      <p>🍄 <strong>BoletusLab® v2.5.7</strong> – Sistema previsionale micologico per fruttificazione <em>Boletus</em> spp.</p>
+      
+      <p><strong>Tecnologie:</strong> Sistema meteorologico ibrido Visual Crossing + Open-Meteo • Lag biologico specie-specifico • Umidità cumulativa • Step-function fruttificazione</p>
+      
+      <p><strong>Base scientifica:</strong> Mumcu Küçüker (2019), Martínez-Peña et al. (2012), Parladé et al. (2017), Tahvanainen et al. (2016), de la Varga et al. (2013)</p>
+      
+      <p><strong>Sviluppato da Antonio Pio D'Aloia</strong> • FastAPI • NumPy/SciPy • SQLite • Docker • Machine Learning • Leaflet.js</p>
+      
+      <p><small>BoletusLab® è un marchio registrato. Tutti i diritti riservati.</small></p>
     </footer>
   </div>
 
@@ -484,6 +506,16 @@
           hours: hours.toString(),
           autohabitat: habitat ? '0' : '1'
         });
+        
+        // NUOVO: Aggiungi parametri esposizione
+        try {
+          const aspectMode = document.getElementById('aspect-mode').value;
+          const aspectOctant = document.getElementById('aspect-octant').value;
+          params.set('autoaspect', aspectMode === 'auto' ? '1' : '0');
+          params.set('aspect', aspectMode === 'manual' ? aspectOctant : '');
+        } catch (e) { 
+          debugLog('Aspect params error:', e); 
+        }
         
         const response = await fetch(`${API_BASE}/api/score?${params}`);
         if (!response.ok) {
@@ -1006,6 +1038,9 @@
         map.setView([result.lat, result.lon], 12);
         if (mapMarker) mapMarker.setLatLng([result.lat, result.lon]);
         else mapMarker = L.marker([result.lat, result.lon]).addTo(map);
+        
+        // NUOVO: Analisi automatica anche dopo geocoding
+        setTimeout(() => handleAnalysis(), 500);
       } catch (error) {
         showNotification(error.message, 'error');
       } finally {
@@ -1065,10 +1100,10 @@
             const weatherSources = data.weather_sources ? Object.keys(data.weather_sources).join(', ') : 'unknown';
             const weatherQuality = data.weather_quality_score ? data.weather_quality_score.toFixed(2) : '?';
             
-            showNotification(`✅ Analisi ibrida completata: ${data.index}/100 per ${data.species || 'specie sconosciuta'} (qualità: ${weatherQuality}, fonti: ${weatherSources})`);
+            showNotification(`✅ Analisi BoletusLab completata: ${data.index}/100 per ${data.species || 'specie sconosciuta'} (qualità: ${weatherQuality}, fonti: ${weatherSources})`);
 
         } catch (error) {
-            debugLog('❌ Hybrid weather analysis failed:', error);
+            debugLog('❌ BoletusLab analysis failed:', error);
             showNotification(error.message, 'error');
         } finally {
             setLoading(false);
@@ -1135,14 +1170,14 @@
     
     // === INIZIALIZZAZIONE ===
     document.addEventListener('DOMContentLoaded', function() {
-      debugLog('🔄 DOM loaded, initializing hybrid weather version v2.5.7...');
+      debugLog('🔄 DOM loaded, initializing BoletusLab v2.5.7...');
       
       // Verifica librerie
       setTimeout(() => {
         if (!checkChartJS()) {
           showNotification('⚠️ Errore: Chart.js non caricato correttamente', 'error');
         } else {
-          debugLog('✅ All libraries loaded successfully for hybrid weather system');
+          debugLog('✅ All libraries loaded successfully for BoletusLab system');
         }
       }, 1000);
       
@@ -1165,7 +1200,7 @@
             mapMarker = L.marker(e.latlng).addTo(map);
           }
           
-          showNotification('🔬 Coordinate selezionate. Avvio analisi sistema ibrido...', 'success');
+          showNotification('🔬 Coordinate selezionate. Avvio analisi BoletusLab...', 'success');
           handleAnalysis();
         });
         
@@ -1175,9 +1210,19 @@
         showNotification('Errore inizializzazione mappa', 'error');
       }
       
+      // === GESTIONE SELETTORE ESPOSIZIONE ===
+      document.getElementById('aspect-mode').addEventListener('change', function() {
+        const aspectOctant = document.getElementById('aspect-octant');
+        if (this.value === 'manual') {
+          aspectOctant.style.display = 'block';
+        } else {
+          aspectOctant.style.display = 'none';
+          aspectOctant.value = '';
+        }
+      });
+
       // Event listeners per i bottoni
       document.getElementById('btnGeo').addEventListener('click', handleGeocode);
-      document.getElementById('btnRun').addEventListener('click', handleAnalysis);
       document.getElementById('btn-report-sighting').addEventListener('click', handleReportSighting);
       document.getElementById('btn-report-no-finding').addEventListener('click', handleReportNoFinding);
 
@@ -1192,7 +1237,7 @@
       // Carica statistiche validazione
       updateValidationStats();
       
-      debugLog('🎉 Initialization completed - PorciniCast v2.5.7 Hybrid Weather System ready!');
+      debugLog('🎉 Initialization completed - BoletusLab v2.5.7 Sistema Previsionale Micologico ready!');
     });
   </script>
 </body>
