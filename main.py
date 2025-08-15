@@ -1786,7 +1786,7 @@ async def api_score_hybrid_weather(
             "elevation_m": round(elev_m),
             "slope_deg": round(slope_deg, 1),
             "aspect_deg": round(aspect_deg, 1),
-            "aspect_octant": aspect_oct or "N/A",
+            "aspect_octant": (aspect_used if aspect_source=="manuale" else (aspect_oct or "N/A")),
             "aspect_used": aspect_used or (aspect_oct or "N/A"),
             "aspect_source": aspect_source,
             "concavity": round(concavity, 3),
