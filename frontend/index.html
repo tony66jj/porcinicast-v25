@@ -206,12 +206,19 @@
             <option>castagno</option><option>faggio</option><option>quercia</option>
             <option>conifere</option><option>misto</option><option>altro</option>
           </select>
+          <div style="margin-top:8px;">
+            <label style="display:flex;align-items:center;gap:6px;font-size:11px;">
+              <input type="checkbox" id="advanced-lag" style="width:auto;">
+              🧬 Lag biologico avanzato (includi effetto esposizione)
+            </label>
+          </div>
         </div>
         <div>
           <label>Esposizione</label>
           <select id="aspect-mode">
             <option value="auto">Automatico DEM</option>
             <option value="manual">Manuale</option>
+            <option value="multi">Pianeggiante / Multi-esposizione</option>
           </select>
           <select id="aspect-octant" style="display:none;margin-top:4px;">
             <option value="">Seleziona...</option>
@@ -224,6 +231,12 @@
             <option value="W">Ovest (W)</option>
             <option value="NW">Nord-Ovest (NW)</option>
           </select>
+          <div style="margin-top:8px;">
+            <label style="display:flex;align-items:center;gap:6px;font-size:11px;">
+              <input type="checkbox" id="advanced-lag" style="width:auto;">
+              🧬 Lag biologico avanzato (includi effetto esposizione)
+            </label>
+          </div>
         </div>
         <div>
           <label>Ore sul campo</label>
@@ -401,17 +414,15 @@
       </div>
     </div>
 
-    <footer>
-      <p>🍄 <strong>BoletusLab® v2.5.7</strong> – Sistema previsionale micologico per fruttificazione <em>Boletus</em> spp.</p>
-      
-      <p><strong>Tecnologie:</strong> Sistema meteorologico ibrido Visual Crossing + Open-Meteo • Lag biologico specie-specifico • Umidità cumulativa • Step-function fruttificazione</p>
-      
-      <p><strong>Base scientifica:</strong> Mumcu Küçüker (2019), Martínez-Peña et al. (2012), Parladé et al. (2017), Tahvanainen et al. (2016), de la Varga et al. (2013)</p>
-      
-      <p><strong>Sviluppato da Antonio Pio D'Aloia</strong> • FastAPI • NumPy/SciPy • SQLite • Docker • Machine Learning • Leaflet.js</p>
-      
-      <p><small>BoletusLab® è un marchio registrato. Tutti i diritti riservati.</small></p>
-    </footer>
+    
+<footer>
+  <p>🍄 <strong>BoletusLab® v2.5.7</strong> – Sistema previsionale micologico per fruttificazione <em>Boletus</em> spp.</p>
+  <p><strong>Tecnologie:</strong> Sistema meteorologico ibrido Visual Crossing + Open-Meteo • Lag biologico specie-specifico • Umidità cumulativa • Step-function fruttificazione</p>
+  <p><strong>Base scientifica:</strong> Mumcu Küçüker (2019), Martínez-Peña et al. (2012), Parladé et al. (2017), Tahvanainen et al. (2016), de la Varga et al. (2013)</p>
+  <p><strong>Sviluppato da Antonio Pio D'Aloia</strong> • FastAPI • NumPy/SciPy • SQLite • Docker • Machine Learning • Leaflet.js</p>
+  <p><small>BoletusLab® è un marchio registrato. Tutti i diritti riservati.</small></p>
+</footer>
+
   </div>
 
   <div id="notification" class="notification"></div>
@@ -512,7 +523,9 @@
           const aspectMode = document.getElementById('aspect-mode').value;
           const aspectOctant = document.getElementById('aspect-octant').value;
           params.set('autoaspect', aspectMode === 'auto' ? '1' : '0');
-          params.set('aspect', aspectMode === 'manual' ? aspectOctant : '');
+          params.set('aspect', aspectMode === 'manual' ? aspectOctant : (aspectMode === 'multi' ? 'FLAT' : ''));
+          // Lag avanzato
+          try { params.set('advanced_lag', document.getElementById('advanced-lag').checked ? '1' : '0'); } catch (e) {}
         } catch (e) { 
           debugLog('Aspect params error:', e); 
         }
