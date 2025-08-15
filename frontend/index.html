@@ -301,16 +301,16 @@
     </div>
 
     <div class="panel section">
-      <h3>🌧️ Dati Meteorologici e Eventi Piovosi</h3>
+      <h3>🌧️ Dati Meteorologici Completi e Eventi Piovosi</h3>
       <div class="grid g2">
         <div>
-          <h4>📊 Ultimi 15 giorni</h4>
+          <h4>📊 Ultimi 15 giorni (Pioggia + Temperature)</h4>
           <div id="rain-past-table">
             <p class="muted">In attesa di analisi...</p>
           </div>
         </div>
         <div>
-          <h4>🔮 Prossimi 10 giorni</h4>
+          <h4>🔮 Prossimi 10 giorni (Pioggia + Temperature)</h4>
           <div id="rain-future-table">
             <p class="muted">In attesa di analisi...</p>
           </div>
@@ -802,8 +802,63 @@
       }
     }
 
+    function updateWeatherTables(data) {
+      debugLog('Updating combined weather tables (rain + temperature):', { 
+        past: data.weather_past ? Object.keys(data.weather_past).length : 0, 
+        future: data.weather_future ? Object.keys(data.weather_future).length : 0
+      });
+      
+      try {
+        const pastTable = document.getElementById('rain-past-table');
+        if (data.weather_past && Object.keys(data.weather_past).length > 0) {
+          let html = '<table><tr><th>Data</th><th>Pioggia (mm)</th><th>T. Min (°C)</th><th>T. Max (°C)</th><th>T. Media (°C)</th></tr>';
+          Object.entries(data.weather_past)
+            .sort((a,b) => new Date(a[0]) - new Date(b[0]))
+            .reverse()
+            .slice(0, 15)
+            .forEach(([date, weather]) => {
+              html += `<tr>
+                <td>${formatDate(date)}</td>
+                <td>${weather.precipitation_mm}</td>
+                <td style="color:#8bb7ff">${weather.temp_min}</td>
+                <td style="color:#ff6b6b">${weather.temp_max}</td>
+                <td style="color:#ffc857">${weather.temp_mean}</td>
+              </tr>`;
+            });
+          html += '</table>';
+          pastTable.innerHTML = html;
+        } else {
+          pastTable.innerHTML = '<p class="muted">Dati meteorologici passati non disponibili</p>';
+        }
+
+        const futureTable = document.getElementById('rain-future-table');
+        if (data.weather_future && Object.keys(data.weather_future).length > 0) {
+          let html = '<table><tr><th>Data</th><th>Pioggia (mm)</th><th>T. Min (°C)</th><th>T. Max (°C)</th><th>T. Media (°C)</th></tr>';
+          Object.entries(data.weather_future).forEach(([date, weather]) => {
+            html += `<tr>
+              <td>${formatDate(date)}</td>
+              <td>${weather.precipitation_mm}</td>
+              <td style="color:#8bb7ff">${weather.temp_min}</td>
+              <td style="color:#ff6b6b">${weather.temp_max}</td>
+              <td style="color:#ffc857">${weather.temp_mean}</td>
+            </tr>`;
+          });
+          html += '</table>';
+          futureTable.innerHTML = html;
+        } else {
+          futureTable.innerHTML = '<p class="muted">Dati meteorologici futuri non disponibili</p>';
+        }
+        
+        debugLog('✅ Combined weather tables updated successfully');
+      } catch (error) {
+        debugLog('❌ Error updating weather tables:', error);
+        // Fallback alle tabelle separate se i dati combinati non sono disponibili
+        updateRainTables(data);
+      }
+    }
+
     function updateRainTables(data) {
-      debugLog('Updating rain tables hybrid weather:', { 
+      debugLog('Updating rain tables (fallback):', { 
         past: data.rain_past ? Object.keys(data.rain_past).length : 0, 
         future: data.rain_future ? Object.keys(data.rain_future).length : 0
       });
@@ -833,7 +888,7 @@
           futureTable.innerHTML = '<p class="muted">Dati futuri non disponibili</p>';
         }
         
-        debugLog('✅ Rain tables updated successfully');
+        debugLog('✅ Rain tables (fallback) updated successfully');
       } catch (error) {
         debugLog('❌ Error updating rain tables:', error);
       }
@@ -1003,7 +1058,7 @@
               document.getElementById('chart-error').textContent = 'Dati previsione non ricevuti dal sistema ibrido';
             }
             
-            updateRainTables(data);
+            updateWeatherTables(data);
             updateFlushEvents(data);
             updateFieldAnalysis(data);
             
