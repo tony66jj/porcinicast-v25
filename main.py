@@ -1700,14 +1700,33 @@ async def api_score_hybrid_weather(
         
         processing_time = round((time.time() - start_time) * 1000, 1)
         
-        # Rain tables
+        # Tabelle combinate meteo (pioggia + temperature)
+        weather_past_table = {}
+        for i in range(min(past_days, len(time_series))):
+            date_key = time_series[i]
+            weather_past_table[date_key] = {
+                "precipitation_mm": round(P_past[i], 1),
+                "temp_min": round(Tmin_past[i], 1),
+                "temp_max": round(Tmax_past[i], 1),
+                "temp_mean": round(Tmean_past[i], 1)
+            }
+        
+        weather_future_table = {}
+        for i in range(future_days):
+            date_key = time_series[past_days + i] if past_days + i < len(time_series) else f"+{i+1}d"
+            weather_future_table[date_key] = {
+                "precipitation_mm": round(P_future[i], 1),
+                "temp_min": round(Tmin_series[past_days + i], 1) if past_days + i < len(Tmin_series) else 0.0,
+                "temp_max": round(Tmax_series[past_days + i], 1) if past_days + i < len(Tmax_series) else 0.0,
+                "temp_mean": round(Tmean_future[i], 1)
+            }
+        
+        # Manteniamo le tabelle separate per retrocompatibilità
         rain_past_table = {time_series[i]: round(P_past[i], 1) for i in range(min(past_days, len(time_series)))}
         rain_future_table = {
             time_series[past_days + i] if past_days + i < len(time_series) else f"+{i+1}d": round(P_future[i], 1) 
             for i in range(future_days)
         }
-        
-        # Tabelle temperature
         temp_past_table = {time_series[i]: round(Tmean_past[i], 1) for i in range(min(past_days, len(time_series)))}
         temp_future_table = {time_series[past_days + i] if past_days + i < len(time_series) else f"+{i+1}d": round(Tmean_future[i],1) for i in range(future_days)}
 
@@ -1762,6 +1781,10 @@ async def api_score_hybrid_weather(
             "rain_future": rain_future_table,
             "temp_past": temp_past_table,
             "temp_future": temp_future_table,
+            
+            # NUOVO: Tabelle meteo combinate (pioggia + temperature)
+            "weather_past": weather_past_table,
+            "weather_future": weather_future_table,
             
             "has_local_validations": has_validations,
             "validation_count": validation_count,
