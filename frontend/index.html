@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>PorciniCast v2.5.7 — Sistema Meteorologico Ibrido</title>
+  <title>PorciniCast v2.5.7 – Sistema Meteorologico Ibrido</title>
   
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
   
@@ -179,7 +179,7 @@
 <body>
   <div class="wrap">
     <header>
-      <h1>🍄 PorciniCast — Sistema Meteorologico Ibrido</h1>
+      <h1>🍄 PorciniCast – Sistema Meteorologico Ibrido</h1>
       <span class="badge version-badge">v2.5.7</span>
       <span class="badge scientific-badge">Visual Crossing + Open-Meteo</span>
       <span class="badge">Dati Completi 15 Giorni</span>
@@ -231,7 +231,7 @@
         <div class="hr"></div>
         <div class="metric"><div class="k">Finestra migliore</div><div id="k-window" class="v">—</div></div>
         <div style="margin-top:8px;">
-          <span id="k-model-version" class="chip">v2.5.6</span>
+          <span id="k-model-version" class="chip">v2.5.7</span>
           <span id="k-has-validations" class="chip">validazioni: —</span>
         </div>
       </div>
@@ -280,7 +280,7 @@
     <div class="panel section">
       <h3>📈 Previsione Prossimi 10 Giorni (Step-Function Scientifica)</h3>
       <div style="margin-bottom:8px;color:var(--muted);font-size:12px;">
-        ✨ <strong>v2.5.6:</strong> Lag specie-specifico • Umidità cumulativa • Esposizione corretta • Step-function fruttificazione
+        ✨ <strong>v2.5.7:</strong> Sistema ibrido Visual Crossing + Open-Meteo • Lag specie-specifico • Umidità cumulativa • Esposizione corretta
       </div>
       <div class="lag-explanation" id="lag-explanation" style="display:none;">
         💡 <strong>Fruttificazione Step-Function:</strong> Basato su letteratura scientifica - i funghi appaiono improvvisamente "tutto o niente" dopo lag biologico specie-specifico.
@@ -294,9 +294,9 @@
     </div>
 
     <div class="panel section">
-      <h3>🧭 Analisi Scientifica Dettagliata v2.5.6</h3>
+      <h3>🧭 Analisi Scientifica Dettagliata v2.5.7</h3>
       <div id="field-analysis" class="field-analysis">
-        <p class="muted">Esegui un'analisi per vedere i dettagli scientifici con lag specie-specifico e umidità cumulativa.</p>
+        <p class="muted">Esegui un'analisi per vedere i dettagli scientifici con sistema meteorologico ibrido.</p>
       </div>
     </div>
 
@@ -322,7 +322,7 @@
           <p class="muted">In attesa di analisi...</p>
         </div>
         <div id="cumulative-moisture-info" style="margin-top:12px;">
-          <h4>🌊 Sistema Meteorologico Ibrido</h4>
+          <h4>🌊 Sistema Meteorologico Ibrido v2.5.7</h4>
           <div id="cumulative-moisture-value" class="muted">In attesa di calcolo qualità weather...</div>
         </div>
       </div>
@@ -330,7 +330,7 @@
 
     <div class="panel section crowdsource">
       <h3>🧬 Contribuisci alla Ricerca Scientifica</h3>
-      <p style="margin-bottom:20px;color:#cfe6ff;">Aiuta a perfezionare il modello con lag specie-specifico condividendo le tue osservazioni. I dati alimentano l'algoritmo di machine learning per migliorare la previsione della fruttificazione fungina.</p>
+      <p style="margin-bottom:20px;color:#cfe6ff;">Aiuta a perfezionare il modello ibrido condividendo le tue osservazioni. I dati alimentano l'algoritmo di machine learning per migliorare la previsione della fruttificazione fungina.</p>
       
       <div class="grid g2">
         <div>
@@ -385,7 +385,7 @@
     </div>
 
     <footer>
-      <p>🍄 <strong>PorciniCast v2.5.7</strong> — Sistema meteorologico ibrido per previsione fruttificazione <em>Boletus</em> spp.</p>
+      <p>🍄 <strong>PorciniCast v2.5.7</strong> – Sistema meteorologico ibrido per previsione fruttificazione <em>Boletus</em> spp.</p>
       <p>Innovazioni: Visual Crossing + Open-Meteo • Lag biologico specie-specifico • Umidità cumulativa • Step-function fruttificazione</p>
       <p>Basato su letteratura peer-reviewed: Viitanen (1997), Frontiers Soil Science (2023), ScienceDirect (2017)</p>
       <p><strong>Sviluppato da Antonio Pio D'Aloia</strong> • FastAPI • NumPy/SciPy • SQLite • Docker • Crowd-sourcing ML-ready • Mappa Interattiva Leaflet.js</p>
@@ -476,7 +476,7 @@
 
     async function getAnalysis(lat, lon, habitat = '', hours = 4) {
       try {
-        debugLog('Starting scientifically corrected analysis:', { lat, lon, habitat, hours });
+        debugLog('Starting hybrid weather analysis:', { lat, lon, habitat, hours });
         const params = new URLSearchParams({
           lat: lat.toString(),
           lon: lon.toString(),
@@ -485,23 +485,13 @@
           autohabitat: habitat ? '0' : '1'
         });
         
-        
-// === ESPOSIZIONE (auto/manuale) ===
-try {
-  const aspectModeEl = document.getElementById('aspect-mode');
-  const aspectOctEl  = document.getElementById('aspect-octant');
-  const aspectMode   = aspectModeEl ? aspectModeEl.value : 'auto';
-  const aspectManual = aspectOctEl  ? (aspectOctEl.value || '') : '';
-  params.set('autoaspect', aspectMode === 'auto' ? '1' : '0');
-  params.set('aspect', aspectMode === 'manual' ? aspectManual : '');
-} catch (e) { console.warn('Aspect params not wired:', e); }
-const response = await fetch(`${API_BASE}/api/score?${params}`);
+        const response = await fetch(`${API_BASE}/api/score?${params}`);
         if (!response.ok) {
             const errData = await response.json().catch(() => ({ detail: 'Errore generico' }));
             throw new Error(`HTTP ${response.status}: ${errData.detail || 'Errore sconosciuto'}`);
         }
         const result = await response.json();
-        debugLog('Scientifically corrected analysis result:', {
+        debugLog('Hybrid weather analysis result:', {
           hasIndex: !!result.index,
           hasForecast: Array.isArray(result.forecast),
           forecastLength: result.forecast?.length,
@@ -509,12 +499,13 @@ const response = await fetch(`${API_BASE}/api/score?${params}`);
           eventsCount: result.flush_events?.length,
           hasSpeciesLag: !!result.species,
           hasCumulativeMoisture: !!result.cumulative_moisture_index,
-          scientificImprovements: result.diagnostics?.scientific_improvements
+          weatherQuality: result.weather_quality_score,
+          weatherSources: result.weather_sources
         });
         return result;
       } catch (error) {
-        debugLog('Scientific analysis error:', error);
-        throw new Error(`Errore analisi scientifica: ${error.message}`);
+        debugLog('Hybrid weather analysis error:', error);
+        throw new Error(`Errore analisi sistema ibrido: ${error.message}`);
       }
     }
 
@@ -561,7 +552,7 @@ const response = await fetch(`${API_BASE}/api/score?${params}`);
 
     // === UI UPDATES ===
     function updateKPIs(data) {
-      debugLog('Updating KPIs scientifically corrected:', data);
+      debugLog('Updating KPIs hybrid weather:', data);
       
       try {
         document.getElementById('k-index').textContent = `${data.index}/100`;
@@ -592,7 +583,7 @@ const response = await fetch(`${API_BASE}/api/score?${params}`);
         const hasValidations = data.has_local_validations ? 'Sì' : 'No';
         document.getElementById('k-has-validations').textContent = `validazioni: ${hasValidations}`;
         
-        // NUOVO: Mostra qualità e fonti weather se disponibili
+        // NUOVO: Mostra qualità e fonti weather del sistema ibrido
         if (data.weather_quality_score !== undefined) {
           const qualityDiv = document.getElementById('cumulative-moisture-value');
           if (qualityDiv) {
@@ -602,22 +593,15 @@ const response = await fetch(`${API_BASE}/api/score?${params}`);
             const qualityColor = data.weather_quality_score >= 0.8 ? '#66e28a' : data.weather_quality_score >= 0.6 ? '#ffc857' : '#ff6b6b';
             
             qualityDiv.innerHTML = `
-              <strong>Qualità Weather:</strong> <span style="color:${qualityColor}">${data.weather_quality_score.toFixed(2)}</span>/1.00<br>
+              <strong>Qualità Weather Ibrida:</strong> <span style="color:${qualityColor}">${data.weather_quality_score.toFixed(2)}</span>/1.00<br>
               <strong>Fonti:</strong> Visual Crossing (${vcDays}d) + Open-Meteo (${omDays}d)<br>
               <strong>Umidità Cumulativa:</strong> ${data.cumulative_moisture_index.toFixed(1)} mm
             `;
             qualityDiv.className = data.weather_quality_score >= 0.8 ? 'chip ok' : data.weather_quality_score >= 0.6 ? 'chip warn' : 'chip bad';
           }
-        } else if (data.cumulative_moisture_index !== undefined) {
-          // Fallback per retrocompatibilità
-          const cmiDiv = document.getElementById('cumulative-moisture-value');
-          if (cmiDiv) {
-            cmiDiv.innerHTML = `<strong>Indice attuale:</strong> ${data.cumulative_moisture_index.toFixed(1)} mm (finestra 14 giorni con peso decrescente)`;
-            cmiDiv.className = data.cumulative_moisture_index > 10 ? 'chip ok' : data.cumulative_moisture_index > 5 ? 'chip warn' : 'chip bad';
-          }
         }
         
-        debugLog('KPIs updated successfully with scientific improvements');
+        debugLog('KPIs updated successfully with hybrid weather system');
       } catch (error) {
         debugLog('Error updating KPIs:', error);
         showNotification('Errore aggiornamento KPI', 'error');
@@ -625,7 +609,7 @@ const response = await fetch(`${API_BASE}/api/score?${params}`);
     }
 
     function updateChart(forecast, data = null) {
-      debugLog('Updating chart with scientifically corrected forecast:', forecast);
+      debugLog('Updating chart with hybrid weather forecast:', forecast);
       
       if (!checkChartJS()) {
         return;
@@ -636,7 +620,7 @@ const response = await fetch(`${API_BASE}/api/score?${params}`);
         if (!Array.isArray(forecast) || forecast.length === 0) {
           debugLog('❌ Forecast non valido:', forecast);
           document.getElementById('chart-error').style.display = 'block';
-          document.getElementById('chart-error').textContent = 'Dati previsione non disponibili dal server';
+          document.getElementById('chart-error').textContent = 'Dati previsione non disponibili dal sistema ibrido';
           return;
         }
         
@@ -677,7 +661,7 @@ const response = await fetch(`${API_BASE}/api/score?${params}`);
         
         // DATASET PRINCIPALE
         const datasets = [{
-          label: 'Indice Fruttificazione (Step-Function)',
+          label: 'Indice Fruttificazione (Sistema Ibrido)',
           data: forecast,
           borderColor: '#62d5b4',
           backgroundColor: 'rgba(98, 213, 180, 0.15)',
@@ -809,39 +793,20 @@ const response = await fetch(`${API_BASE}/api/score?${params}`);
         
         // Nascondi messaggio errore
         document.getElementById('chart-error').style.display = 'none';
-        debugLog('✅ Scientific chart created successfully with', forecast.length, 'data points and', fruitingZones.length, 'fruiting zones');
+        debugLog('✅ Hybrid weather chart created successfully with', forecast.length, 'data points and', fruitingZones.length, 'fruiting zones');
         
       } catch (error) {
-        debugLog('❌ Error creating scientific chart:', error);
+        debugLog('❌ Error creating hybrid weather chart:', error);
         document.getElementById('chart-error').style.display = 'block';
-        document.getElementById('chart-error').textContent = `Errore grafico: ${error.message}`;
+        document.getElementById('chart-error').textContent = `Errore grafico sistema ibrido: ${error.message}`;
       }
     }
 
     function updateRainTables(data) {
-      debugLog('Updating rain tables scientifically corrected:', { 
+      debugLog('Updating rain tables hybrid weather:', { 
         past: data.rain_past ? Object.keys(data.rain_past).length : 0, 
         future: data.rain_future ? Object.keys(data.rain_future).length : 0
-      }
-
-
-    function updateTempTables(data) {
-      const tempDiv = document.getElementById('temp-past-table');
-      if (!tempDiv) return;
-      try {
-        if (data.temp_past && Object.keys(data.temp_past).length) {
-          const rows = Object.entries(data.temp_past)
-            .sort((a,b)=>new Date(a[0]) - new Date(b[0]))
-            .slice(-15)
-            .map(([d,t]) => `<tr><td>${formatDate(d)}</td><td>${Number(t).toFixed(1)}</td></tr>`)
-            .join('');
-          tempDiv.innerHTML = `<table><tr><th>Data</th><th>T media (°C)</th></tr>${rows}</table>`;
-        } else {
-          tempDiv.innerHTML = '<p class="muted">Nessun dato temperatura.</p>';
-        }
-      } catch (e) { console.error('updateTempTables error', e); }
-    }
-);
+      });
       
       try {
         const pastTable = document.getElementById('rain-past-table');
@@ -875,7 +840,7 @@ const response = await fetch(`${API_BASE}/api/score?${params}`);
     }
 
     function updateFlushEvents(data) {
-      debugLog('Updating flush events scientifically corrected:', {
+      debugLog('Updating flush events hybrid weather:', {
         hasEvents: Array.isArray(data.flush_events),
         eventCount: data.flush_events?.length || 0
       });
@@ -924,7 +889,7 @@ const response = await fetch(`${API_BASE}/api/score?${params}`);
     }
 
     function updateFieldAnalysis(data) {
-      debugLog('Updating field analysis scientifically corrected:', {
+      debugLog('Updating field analysis hybrid weather:', {
         hasExplanation: !!data.dynamic_explanation,
         explanationLength: data.dynamic_explanation?.length || 0
       });
@@ -937,7 +902,7 @@ const response = await fetch(`${API_BASE}/api/score?${params}`);
           analysisDiv.innerHTML = '<p class="muted">Analisi scientifica dettagliata non disponibile per questa località</p>';
         }
         
-        debugLog('✅ Field analysis updated successfully with scientific corrections');
+        debugLog('✅ Field analysis updated successfully with hybrid weather data');
       } catch (error) {
         debugLog('❌ Error updating field analysis:', error);
       }
@@ -1023,7 +988,7 @@ const response = await fetch(`${API_BASE}/api/score?${params}`);
             const habitat = document.getElementById('habitat').value;
             const hours = parseInt(document.getElementById('hours').value);
 
-            debugLog('🚀 Starting scientifically corrected analysis with:', { lat, lon, habitat, hours });
+            debugLog('🚀 Starting hybrid weather analysis with:', { lat, lon, habitat, hours });
             const data = await getAnalysis(lat, lon, habitat, hours);
             
             // Aggiornamenti UI
@@ -1035,21 +1000,20 @@ const response = await fetch(`${API_BASE}/api/score?${params}`);
             } else {
               debugLog('❌ Forecast mancante o non valido:', data.forecast);
               document.getElementById('chart-error').style.display = 'block';
-              document.getElementById('chart-error').textContent = 'Dati previsione non ricevuti dal server';
+              document.getElementById('chart-error').textContent = 'Dati previsione non ricevuti dal sistema ibrido';
             }
             
             updateRainTables(data);
             updateFlushEvents(data);
             updateFieldAnalysis(data);
             
-            const improvements = data.diagnostics?.scientific_improvements || {};
-            const improvementsList = Object.entries(improvements).filter(([k,v]) => v).map(([k,v]) => k).join(', ');
             const weatherSources = data.weather_sources ? Object.keys(data.weather_sources).join(', ') : 'unknown';
+            const weatherQuality = data.weather_quality_score ? data.weather_quality_score.toFixed(2) : '?';
             
-            showNotification(`✅ Analisi ibrida completata: ${data.index}/100 per ${data.species || 'specie sconosciuta'} (fonti: ${weatherSources})`);
+            showNotification(`✅ Analisi ibrida completata: ${data.index}/100 per ${data.species || 'specie sconosciuta'} (qualità: ${weatherQuality}, fonti: ${weatherSources})`);
 
         } catch (error) {
-            debugLog('❌ Scientific analysis failed:', error);
+            debugLog('❌ Hybrid weather analysis failed:', error);
             showNotification(error.message, 'error');
         } finally {
             setLoading(false);
@@ -1116,19 +1080,18 @@ const response = await fetch(`${API_BASE}/api/score?${params}`);
     
     // === INIZIALIZZAZIONE ===
     document.addEventListener('DOMContentLoaded', function() {
-      debugLog('🔄 DOM loaded, initializing scientifically corrected version...');
+      debugLog('🔄 DOM loaded, initializing hybrid weather version v2.5.7...');
       
       // Verifica librerie
       setTimeout(() => {
         if (!checkChartJS()) {
           showNotification('⚠️ Errore: Chart.js non caricato correttamente', 'error');
         } else {
-          debugLog('✅ All libraries loaded successfully for scientific version');
+          debugLog('✅ All libraries loaded successfully for hybrid weather system');
         }
       }, 1000);
       
       try {
-        let map;
         // Inizializzazione Mappa Leaflet
         map = L.map('map').setView([42.5, 12.5], 6);
         L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
@@ -1147,7 +1110,7 @@ const response = await fetch(`${API_BASE}/api/score?${params}`);
             mapMarker = L.marker(e.latlng).addTo(map);
           }
           
-          showNotification('🔬 Coordinate selezionate. Avvio analisi scientifica...', 'success');
+          showNotification('🔬 Coordinate selezionate. Avvio analisi sistema ibrido...', 'success');
           handleAnalysis();
         });
         
@@ -1174,7 +1137,7 @@ const response = await fetch(`${API_BASE}/api/score?${params}`);
       // Carica statistiche validazione
       updateValidationStats();
       
-      debugLog('🎉 Initialization completed - PorciniCast v2.5.6 Scientifically Corrected ready!');
+      debugLog('🎉 Initialization completed - PorciniCast v2.5.7 Hybrid Weather System ready!');
     });
   </script>
 </body>
