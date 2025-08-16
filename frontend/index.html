@@ -439,15 +439,7 @@
         <div class="metric"><div class="k">Range</div><div id="k-size-range" class="v">—</div></div>
         <div class="hr"></div>
         <div class="metric"><div class="k">Raccolto atteso</div><div id="k-harvest" class="v" style="font-size:18px">—</div></div>
-        <div class="muted" id="k-harvest-note"
-        <div id="terrain-card" class="panel" style="margin-top:12px;padding:10px">
-          <div style="display:flex;gap:12px;flex-wrap:wrap;font-size:14px">
-            <div>⛰️ <strong>Quota:</strong> <span id="t-elev">—</span> m</div>
-            <div>↗️ <strong>Pendenza:</strong> <span id="t-slope">—</span>°</div>
-            <div>🧭 <strong>Esposizione:</strong> <span id="t-aspect">—</span> <span id="t-aspect-src" class="muted"></span></div>
-          </div>
-        </div>
- style="font-size:11px;margin-top:4px"></div>
+        <div class="muted" id="k-harvest-note" style="font-size:11px;margin-top:4px"></div>
       </div>
     </div>
 
@@ -603,18 +595,7 @@
       const map = {reticulatus:'B. reticulatus (= B. aestivalis)', aereus:'B. aereus', edulis:'B. edulis', pinophilus:'B. pinophilus'};
       return map[sp] || ('B. ' + sp);
     }
-    function canShowCoexistence(data){
-      try{
-        const sc = (data.species_analysis?.coexistence_scenario || data.coexistence_scenario || '').toLowerCase();
-        const allowByScenario = sc && !['dominanza','dominante','single','solo'].includes(sc);
-        const probs = data.species_analysis?.species_probabilities || data.species_probabilities || {};
-        const arr = Object.entries(probs).sort((a,b)=>b[1]-a[1]);
-        if (arr.length < 2) return false;
-        const p1 = arr[0][1]||0, p2 = arr[1][1]||0;
-        return allowByScenario || (p1>=0.35 && p2>=0.25);
-      }catch(e){return false;}
-    }
-
+    
 
     // === DEBUG SYSTEM ===
     function debugLog(message, data = null) {
@@ -681,15 +662,8 @@
         result.secondary_species = sa.secondary_species || result.secondary_species || null;
         result.species_probabilities = sa.species_probabilities || result.species_probabilities || {};
         result.species_forecasts = sa.species_forecasts || result.species_forecasts || {};
-        result.species_lags = sa.species_lags || result.species_lags || {};
         result.coexistence_scenario = sa.coexistence_scenario || result.coexistence_scenario || null;
-        if (result.terrain) {
-          result.elevation_m = result.terrain.elevation_m ?? result.elevation_m;
-          result.slope_deg  = result.terrain.slope_deg ?? result.slope_deg;
-          result.aspect_deg = result.terrain.aspect_deg ?? result.aspect_deg;
-          result.aspect_octant = result.terrain.aspect_octant ?? result.aspect_octant;
-          result.aspect_source = result.terrain.aspect_source ?? result.aspect_source;
-        }
+        if (result.terrain) { result.elevation_m = result.terrain.elevation_m ?? result.elevation_m; result.slope_deg = result.terrain.slope_deg ?? result.slope_deg; result.aspect_octant = result.terrain.aspect_octant ?? result.aspect_octant; result.aspect_source = result.terrain.aspect_source ?? result.aspect_source; }
 
         debugLog('Geocoding result:', result);
         return result;
@@ -740,15 +714,8 @@
         result.secondary_species = sa.secondary_species || result.secondary_species || null;
         result.species_probabilities = sa.species_probabilities || result.species_probabilities || {};
         result.species_forecasts = sa.species_forecasts || result.species_forecasts || {};
-        result.species_lags = sa.species_lags || result.species_lags || {};
         result.coexistence_scenario = sa.coexistence_scenario || result.coexistence_scenario || null;
-        if (result.terrain) {
-          result.elevation_m = result.terrain.elevation_m ?? result.elevation_m;
-          result.slope_deg  = result.terrain.slope_deg ?? result.slope_deg;
-          result.aspect_deg = result.terrain.aspect_deg ?? result.aspect_deg;
-          result.aspect_octant = result.terrain.aspect_octant ?? result.aspect_octant;
-          result.aspect_source = result.terrain.aspect_source ?? result.aspect_source;
-        }
+        if (result.terrain) { result.elevation_m = result.terrain.elevation_m ?? result.elevation_m; result.slope_deg = result.terrain.slope_deg ?? result.slope_deg; result.aspect_octant = result.terrain.aspect_octant ?? result.aspect_octant; result.aspect_source = result.terrain.aspect_source ?? result.aspect_source; }
 
         debugLog('Multi-species analysis result:', {
           hasIndex: !!result.index,
@@ -898,7 +865,7 @@
 
         // Specie singola dominante
         const species = data.species || 'reticulatus';
-        speciesDiv.innerHTML = `<strong>Specie dominante:</strong> <em>Boletus ${species}</em>`;
+        speciesDiv.innerHTML = `<strong>Specie dominante:</strong> <em>${prettySpeciesName(data.primary_species||species)}</em>`;
         
         // Nascondi legenda per specie singola
         document.getElementById('species-legend').style.display = 'none';
@@ -971,19 +938,19 @@
         const datasets = [];
         
         // GESTIONE MULTI-SPECIE
-        if (data && data.species_forecasts && Object.keys(data.species_forecasts).length > 1 && canShowCoexistence(data)) {
+        if (data && data.species_forecasts && Object.keys(data.species_forecasts).length > 1) {
           // CURVE MULTIPLE SOVRAPPOSTE
           const speciesProbabilities = data.species_probabilities || {};
           
           Object.entries(data.species_forecasts).forEach(([species, speciesForecast]) => {
             const probability = speciesProbabilities[species] || 0;
-            if (probability < 0.05) return; // Skip specie con probabilità troppo bassa
+            if (probability < 0.1) return; // Skip specie con probabilità troppo bassa
             
             const color = SPECIES_COLORS[species] || SPECIES_COLORS.mixed;
             const alpha = 0.4 + (probability * 0.6); // Trasparenza basata su probabilità
             
             datasets.push({
-              label: `🍄 ${prettySpeciesName(species)} (${Math.round(probability * 100)}%)`,
+              label: `🍄 B. ${species} (${Math.round(probability * 100)}%)`,
               data: speciesForecast,
               borderColor: color,
               backgroundColor: color + Math.floor(alpha * 255).toString(16).padStart(2, '0'),
@@ -1007,7 +974,7 @@
           
         } else {
           // CURVA SINGOLA (sistema tradizionale)
-          const species = data?.primary_species || 'reticulatus';
+          const species = data?.species || 'reticulatus';
           const color = SPECIES_COLORS[species] || SPECIES_COLORS.mixed;
           
           // CALCOLA ZONE ROSSE DI FRUTTIFICAZIONE per specie singola
@@ -1033,7 +1000,7 @@
           
           // Dataset principale
           datasets.push({
-            label: `🍄 ${prettySpeciesName(species)} (Dominante)`,
+            label: `🍄 B. ${species} (Dominante)`,
             data: forecast,
             borderColor: color,
             backgroundColor: color + '26',
@@ -1162,30 +1129,6 @@
             }
           }
         });
-        // Mini tooltip raccolto atteso
-        try{
-          const tip = document.getElementById('chart-mini-tip');
-          const canvas = document.getElementById('forecastChart');
-          if (canvas && tip){
-            canvas.onclick = (ev)=>{
-              if (!currentChart) return;
-              const pts = currentChart.getElementsAtEventForMode(ev, 'nearest', {intersect:true}, true);
-              if (!pts || !pts.length){ tip.style.display='none'; return; }
-              const i = pts[0].index;
-              const rect = canvas.getBoundingClientRect();
-              const x = ev.clientX - rect.left + 8;
-              const y = ev.clientY - rect.top - 10;
-              const dataArr = currentChart.data.datasets[pts[0].datasetIndex].data;
-              const total = (dataArr||[]).reduce((s,v)=>s+(v||0),0) || 1;
-              const overall = (window.__lastScore && window.__lastScore.harvest_estimate) ? Number(window.__lastScore.harvest_estimate) : 0;
-              const expectedKg = overall ? (dataArr[i]/total)*overall : (dataArr[i]/100)*2.0;
-              const dayLabel = currentChart.data.labels[i] || ('Giorno ' + (i+1));
-              tip.innerHTML = `<strong>${dayLabel}</strong><br/>Indice: ${Math.round(dataArr[i])}/100<br/>Raccolto atteso: ~ ${expectedKg.toFixed(1)} kg`;
-              tip.style.left = x+'px'; tip.style.top = y+'px'; tip.style.display='block';
-            };
-          }
-        }catch(e){}
-
         
         // Nascondi messaggio errore
         document.getElementById('chart-error').style.display = 'none';
