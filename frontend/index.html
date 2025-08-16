@@ -447,7 +447,7 @@
             <div>🧭 <strong>Esposizione:</strong> <span id="t-aspect">—</span> <span id="t-aspect-src" class="muted"></span></div>
           </div>
         </div>
-         style="font-size:11px;margin-top:4px"></div>
+ style="font-size:11px;margin-top:4px"></div>
       </div>
     </div>
 
@@ -599,23 +599,22 @@
       'pinophilus': '#8bb7ff',
       'mixed': '#ffc857'
     };
-    
     function prettySpeciesName(sp){
       const map = {reticulatus:'B. reticulatus (= B. aestivalis)', aereus:'B. aereus', edulis:'B. edulis', pinophilus:'B. pinophilus'};
       return map[sp] || ('B. ' + sp);
     }
     function canShowCoexistence(data){
       try{
-        const sc = (data.coexistence_scenario||'').toLowerCase();
+        const sc = (data.species_analysis?.coexistence_scenario || data.coexistence_scenario || '').toLowerCase();
         const allowByScenario = sc && !['dominanza','dominante','single','solo'].includes(sc);
-        const probs = data.species_probabilities || {};
+        const probs = data.species_analysis?.species_probabilities || data.species_probabilities || {};
         const arr = Object.entries(probs).sort((a,b)=>b[1]-a[1]);
         if (arr.length < 2) return false;
         const p1 = arr[0][1]||0, p2 = arr[1][1]||0;
         return allowByScenario || (p1>=0.35 && p2>=0.25);
       }catch(e){return false;}
     }
-        
+
 
     // === DEBUG SYSTEM ===
     function debugLog(message, data = null) {
@@ -677,6 +676,21 @@
         const response = await fetch(`${API_BASE}/api/geocode?q=${encodeURIComponent(query)}`);
         if (!response.ok) throw new Error('Geocoding fallito');
         const result = await response.json();
+        const sa = result.species_analysis || {};
+        result.primary_species = sa.primary_species || result.primary_species || null;
+        result.secondary_species = sa.secondary_species || result.secondary_species || null;
+        result.species_probabilities = sa.species_probabilities || result.species_probabilities || {};
+        result.species_forecasts = sa.species_forecasts || result.species_forecasts || {};
+        result.species_lags = sa.species_lags || result.species_lags || {};
+        result.coexistence_scenario = sa.coexistence_scenario || result.coexistence_scenario || null;
+        if (result.terrain) {
+          result.elevation_m = result.terrain.elevation_m ?? result.elevation_m;
+          result.slope_deg  = result.terrain.slope_deg ?? result.slope_deg;
+          result.aspect_deg = result.terrain.aspect_deg ?? result.aspect_deg;
+          result.aspect_octant = result.terrain.aspect_octant ?? result.aspect_octant;
+          result.aspect_source = result.terrain.aspect_source ?? result.aspect_source;
+        }
+
         debugLog('Geocoding result:', result);
         return result;
       } catch (error) {
@@ -721,7 +735,6 @@
             throw new Error(`HTTP ${response.status}: ${errData.detail || 'Errore sconosciuto'}`);
         }
         const result = await response.json();
-        // Normalizza campi annidati per coerenza UI
         const sa = result.species_analysis || {};
         result.primary_species = sa.primary_species || result.primary_species || null;
         result.secondary_species = sa.secondary_species || result.secondary_species || null;
@@ -729,7 +742,6 @@
         result.species_forecasts = sa.species_forecasts || result.species_forecasts || {};
         result.species_lags = sa.species_lags || result.species_lags || {};
         result.coexistence_scenario = sa.coexistence_scenario || result.coexistence_scenario || null;
-        // Topografia
         if (result.terrain) {
           result.elevation_m = result.terrain.elevation_m ?? result.elevation_m;
           result.slope_deg  = result.terrain.slope_deg ?? result.slope_deg;
@@ -737,7 +749,7 @@
           result.aspect_octant = result.terrain.aspect_octant ?? result.aspect_octant;
           result.aspect_source = result.terrain.aspect_source ?? result.aspect_source;
         }
-            
+
         debugLog('Multi-species analysis result:', {
           hasIndex: !!result.index,
           hasForecast: Array.isArray(result.forecast),
@@ -885,8 +897,8 @@
         }
 
         // Specie singola dominante
-        const species = data.primary_species || 'reticulatus';
-        speciesDiv.innerHTML = `<strong>Specie dominante:</strong> <em>${prettySpeciesName(species)}</em>`;
+        const species = data.species || 'reticulatus';
+        speciesDiv.innerHTML = `<strong>Specie dominante:</strong> <em>Boletus ${species}</em>`;
         
         // Nascondi legenda per specie singola
         document.getElementById('species-legend').style.display = 'none';
@@ -971,7 +983,7 @@
             const alpha = 0.4 + (probability * 0.6); // Trasparenza basata su probabilità
             
             datasets.push({
-              label: `🍄 B. ${species} (${Math.round(probability * 100)}%)`,
+              label: `🍄 ${prettySpeciesName(species)} (${Math.round(probability * 100)}%)`,
               data: speciesForecast,
               borderColor: color,
               backgroundColor: color + Math.floor(alpha * 255).toString(16).padStart(2, '0'),
@@ -995,7 +1007,7 @@
           
         } else {
           // CURVA SINGOLA (sistema tradizionale)
-          const species = data?.species || 'reticulatus';
+          const species = data?.primary_species || 'reticulatus';
           const color = SPECIES_COLORS[species] || SPECIES_COLORS.mixed;
           
           // CALCOLA ZONE ROSSE DI FRUTTIFICAZIONE per specie singola
@@ -1021,7 +1033,7 @@
           
           // Dataset principale
           datasets.push({
-            label: `🍄 B. ${species} (Dominante)`,
+            label: `🍄 ${prettySpeciesName(species)} (Dominante)`,
             data: forecast,
             borderColor: color,
             backgroundColor: color + '26',
@@ -1150,27 +1162,30 @@
             }
           }
         });
-        // Mini tooltip raccolto atteso per punto
+        // Mini tooltip raccolto atteso
         try{
           const tip = document.getElementById('chart-mini-tip');
           const canvas = document.getElementById('forecastChart');
-          canvas.onclick = (ev)=>{
-            if (!currentChart) return;
-            const pts = currentChart.getElementsAtEventForMode(ev, 'nearest', {intersect:true}, true);
-            if (!pts || !pts.length){ tip.style.display='none'; return; }
-            const i = pts[0].index;
-            const rect = canvas.getBoundingClientRect();
-            const x = ev.clientX - rect.left + 8;
-            const y = ev.clientY - rect.top - 10;
-            const total = (forecast || []).reduce((s,v)=>s+(v||0),0) || 1;
-            const overall = (data && data.harvest_estimate) ? Number(data.harvest_estimate) : 0;
-            const expectedKg = overall ? (forecast[i]/total)*overall : (forecast[i]/100)*2.0;
-            const dayLabel = currentChart.data.labels[i] || ('Giorno ' + (i+1));
-            tip.innerHTML = `<strong>${dayLabel}</strong><br/>Indice: ${Math.round(forecast[i])}/100<br/>Raccolto atteso: ~ ${expectedKg.toFixed(1)} kg`;
-            tip.style.left = x+'px'; tip.style.top = y+'px'; tip.style.display='block';
-          };
+          if (canvas && tip){
+            canvas.onclick = (ev)=>{
+              if (!currentChart) return;
+              const pts = currentChart.getElementsAtEventForMode(ev, 'nearest', {intersect:true}, true);
+              if (!pts || !pts.length){ tip.style.display='none'; return; }
+              const i = pts[0].index;
+              const rect = canvas.getBoundingClientRect();
+              const x = ev.clientX - rect.left + 8;
+              const y = ev.clientY - rect.top - 10;
+              const dataArr = currentChart.data.datasets[pts[0].datasetIndex].data;
+              const total = (dataArr||[]).reduce((s,v)=>s+(v||0),0) || 1;
+              const overall = (window.__lastScore && window.__lastScore.harvest_estimate) ? Number(window.__lastScore.harvest_estimate) : 0;
+              const expectedKg = overall ? (dataArr[i]/total)*overall : (dataArr[i]/100)*2.0;
+              const dayLabel = currentChart.data.labels[i] || ('Giorno ' + (i+1));
+              tip.innerHTML = `<strong>${dayLabel}</strong><br/>Indice: ${Math.round(dataArr[i])}/100<br/>Raccolto atteso: ~ ${expectedKg.toFixed(1)} kg`;
+              tip.style.left = x+'px'; tip.style.top = y+'px'; tip.style.display='block';
+            };
+          }
         }catch(e){}
-        
+
         
         // Nascondi messaggio errore
         document.getElementById('chart-error').style.display = 'none';
@@ -1402,7 +1417,7 @@
     }
 
     function buildPracticalAdvice(data) {
-      const species = data.primary_species || 'reticulatus';
+      const species = data.species || 'reticulatus';
       const index = data.index || 0;
       const bestWindow = data.best_window;
       const elevation = data.elevation_m || 800;
