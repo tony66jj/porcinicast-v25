@@ -1,67 +1,1122 @@
-document.getElementById('chart-error').textContent = `Errore grafico: ${error.message}`;
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>BoletusLab® – Sistema Previsionale Micologico Multi-Specie</title>
+  
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
+  
+  <style>
+    :root{
+      --bg:#0b0d10; --panel:#12161b; --muted:#8aa0b6; --text:#e6eef6;
+      --accent:#62d5b4; --accent-2:#8bb7ff; --danger:#ff6b6b; --warn:#ffc857; --ok:#66e28a;
+      --shadow:0 8px 24px rgba(0,0,0,.35);
+      --radius:14px;
+      /* Colori per le specie */
+      --edulis:#62d5b4; --reticulatus:#ff9500; --aereus:#ff6b6b; --pinophilus:#8bb7ff;
+    }
+    *{box-sizing:border-box}
+    html,body{margin:0;background:linear-gradient(180deg,#0a0c0f 0%,#0d1218 100%);color:var(--text);font:16px/1.5 system-ui,Segoe UI,Roboto,Helvetica,Arial,sans-serif}
+    a{color:var(--accent-2)}
+    .wrap{max-width:1200px;margin:32px auto;padding:0 16px}
+    header{display:flex;gap:16px;align-items:center;margin-bottom:18px;flex-wrap:wrap}
+    header h1{font-size:22px;margin:0}
+    header .badge{padding:4px 10px;border-radius:999px;background:linear-gradient(90deg,#1b2230,#17202b);color:#cfe6ff;border:1px solid #283343}
+    .panel{background:linear-gradient(180deg,#12161b,#0f141a);border:1px solid #1e2937;border-radius:var(--radius);box-shadow:var(--shadow); margin-bottom: 20px;}
+    .panel h3{margin:0 0 8px 0;font-size:18px}
+    .controls{display:grid;grid-template-columns:1.1fr .8fr .8fr .8fr .9fr .8fr auto;gap:10px;align-items:end;padding:16px}
+    label{font-size:12px;color:var(--muted);display:block;margin-bottom:6px}
+    input[type=text],input[type=number],select{
+      width:100%;padding:10px 12px;border-radius:10px;border:1px solid #243142;background:#0d141b;color:var(--text)
+    }
+    .btn{padding:10px 14px;border-radius:12px;border:1px solid #2a384b;background:linear-gradient(180deg,#1b2430,#151c26);color:#e9f5ff;font-weight:600;cursor:pointer;transition:all 0.2s ease}
+    .btn:hover{transform:translateY(-1px);box-shadow:0 6px 16px rgba(0,0,0,.28)}
+    .btn.success{background:linear-gradient(180deg,#28a745,#1e7e34);border-color:#1e7e34}
+    .btn.secondary{background:linear-gradient(180deg,#6c757d,#545b62);border-color:#545b62}
+    .grid{display:grid;gap:14px;padding:16px}
+    .grid.g2{grid-template-columns:1fr 1fr}
+    .grid.g3{grid-template-columns:1.1fr .9fr .9fr}
+    .grid.g4{grid-template-columns:repeat(4,1fr)}
+    .metric{display:flex;gap:12px;align-items:center}
+    .metric .k{font-size:12px;color:var(--muted)}
+    .metric .v{font-size:22px;font-weight:700}
+    .chip{display:inline-flex;gap:8px;align-items:center;padding:6px 10px;border-radius:999px;border:1px solid #273244;background:#0f1520;color:#cfe6ff;font-size:12px}
+    .chip.ok{border-color:#224733;background:#0f1a14;color:#b9f3cf}
+    .chip.warn{border-color:#4a3b1a;background:#1a160f;color:#ffe0a3}
+    .chip.bad{border-color:#4a1a1a;background:#1a0f10;color:#ffb9b9}
+    .section{padding:16px}
+    .hr{height:1px;background:linear-gradient(90deg,transparent,#253244,transparent);margin:12px 0}
+    #chart{
+      width:100%;
+      height:350px;
+      max-width:100%;
+      max-height:350px;
+      border-radius:12px;
+      background:linear-gradient(180deg,#0c1015,#0b0f14);
+      border:1px solid #1e2937;
+      overflow:hidden;
+      display:block;
+    }
+    table{width:100%;border-collapse:collapse;border:1px solid #232f40;border-radius:12px;overflow:hidden}
+    th,td{padding:8px 10px;border-bottom:1px solid #232f40;font-size:13px}
+    th{background:#131922;color:#b7c9dd;text-align:left}
+    tr:hover td{background:#0f141b}
+    .events ul{margin:6px 0 0 18px}
+    .events li{margin:2px 0}
+    details{background:#0e141b;border:1px solid #203045;border-radius:12px;padding:10px}
+    summary{cursor:pointer;font-weight:600}
+    .muted{color:#93a7bd}
+    .mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+    footer{margin:24px 0 40px;color:#8aa0b6;font-size:12px;text-align:center}
+    .confidence-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:8px;margin-top:8px}
+    .confidence-item{text-align:center;padding:8px;background:#0a0f14;border-radius:8px;border:1px solid #1e2937}
+    .confidence-label{font-size:10px;color:var(--muted);margin-bottom:4px}
+    .confidence-value{font-size:14px;font-weight:600}
+    
+    #map {
+      height: 350px;
+      width: 100%;
+      max-width: 100%;
+      border-radius: var(--radius);
+      border: 1px solid #1e2937;
+      box-shadow: var(--shadow);
+      cursor: pointer;
+      overflow: hidden;
+    }
+    
+    .crowdsource{
+      background:linear-gradient(135deg,#1a2332,#0f1419);
+      border:2px solid #2a4a3d;
+      margin-top:20px;
+      padding:20px!important;
+    }
+    .crowdsource h3{color:#66e28a;margin-bottom:16px;font-size:20px}
+    .crowdsource h4{color:var(--accent);margin:12px 0 8px 0;font-size:16px}
+    .input-group{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:12px}
+    .input-group input, .input-group select{flex:1;min-width:120px}
+    .input-group input[type="text"]{min-width:250px}
+    
+    .stats-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:12px}
+    .stat-item{text-align:center;padding:12px;background:#0a0f14;border-radius:10px;border:1px solid #1e2937}
+    .stat-value{font-size:20px;font-weight:700;color:var(--accent)}
+    .stat-label{font-size:11px;color:var(--muted);margin-top:4px}
+    .notification{position:fixed;top:20px;right:20px;padding:12px 16px;border-radius:8px;color:white;font-weight:600;z-index:1000;transform:translateX(400px);transition:transform 0.3s ease}
+    .notification.show{transform:translateX(0)}
+    .notification.success{background:#28a745}
+    .notification.error{background:#dc3545}
+    .notification.warn{background:#ffc107;color:#000}
+    .version-badge{background:linear-gradient(45deg,#667eea,#764ba2);padding:3px 8px;border-radius:12px;font-size:11px;font-weight:600}
+    
+    .field-analysis{
+      background:#0a0f14;
+      border-radius:12px;
+      padding:16px;
+      margin-top:12px;
+      line-height:1.7;
+    }
+    .field-analysis h4{
+      color:var(--accent);
+      margin:20px 0 12px 0;
+      font-size:16px;
+      border-bottom:1px solid #1e2937;
+      padding-bottom:8px;
+    }
+    .field-analysis h4:first-child{margin-top:0}
+    .field-analysis p{margin:8px 0;color:#d8e3f0}
+    .field-analysis em{color:var(--muted);font-style:italic}
+    .field-analysis strong{color:#fff;font-weight:600}
+    .field-analysis ul{margin:8px 0 0 20px;color:#d8e3f0}
+    .field-analysis li{margin:4px 0}
+    .return-advice{
+      background:linear-gradient(135deg,#1a2a3e,#0f1925);
+      border-left:4px solid var(--accent);
+      padding:12px;
+      border-radius:8px;
+      margin:16px 0!important;
+    }
+    .loading{opacity:0.6;pointer-events:none}
+    .hidden{display:none}
+    
+    .error-debug {
+      background: #2d1b1b;
+      border: 1px solid #ff6b6b;
+      color: #ffb9b9;
+      padding: 12px;
+      border-radius: 8px;
+      margin: 8px 0;
+      font-family: monospace;
+      font-size: 12px;
+    }
+    
+    .lag-explanation {
+      background: #0e1419;
+      border: 1px solid #62d5b4;
+      border-radius: 8px;
+      padding: 10px;
+      margin: 8px 0;
+      font-size: 11px;
+      color: #b9f3cf;
+    }
+    
+    .scientific-badge {
+      background: linear-gradient(45deg, #ff6b6b, #4ecdc4);
+      color: white;
+      padding: 3px 8px;
+      border-radius: 12px;
+      font-size: 11px;
+      font-weight: 600;
+    }
+
+    /* Toggle Switch per ERA5-Land */
+    .toggle-switch {
+      position: relative;
+      display: inline-block;
+      width: 60px;
+      height: 34px;
+    }
+    
+    .toggle-switch input {
+      opacity: 0;
+      width: 0;
+      height: 0;
+    }
+    
+    .slider {
+      position: absolute;
+      cursor: pointer;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background-color: #2196F3;
+      transition: .4s;
+      border-radius: 34px;
+    }
+    
+    .slider:before {
+      position: absolute;
+      content: "";
+      height: 26px;
+      width: 26px;
+      left: 4px;
+      bottom: 4px;
+      background-color: white;
+      transition: .4s;
+      border-radius: 50%;
+    }
+    
+    input:checked + .slider {
+      background-color: #2196F3;
+    }
+    
+    input:focus + .slider {
+      box-shadow: 0 0 1px #2196F3;
+    }
+    
+    input:checked + .slider:before {
+      transform: translateX(26px);
+    }
+
+    /* Multi-species legend */
+    .species-legend {
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+      margin: 8px 0;
+      padding: 12px;
+      background: #0a0f14;
+      border-radius: 8px;
+      border: 1px solid #1e2937;
+    }
+    
+    .species-legend-item {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 8px;
+      background: #12161b;
+      border-radius: 6px;
+      font-size: 12px;
+    }
+    
+    .species-color-dot {
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      border: 2px solid white;
+    }
+    
+    .species-probability {
+      font-weight: 600;
+      color: var(--accent);
+    }
+
+    /* Weather source controls */
+    .weather-controls {
+      background: #0a0f14;
+      border: 1px solid #1e2937;
+      border-radius: 8px;
+      padding: 12px;
+      margin-top: 8px;
+    }
+    
+    .weather-controls h5 {
+      margin: 0 0 8px 0;
+      color: var(--accent);
+      font-size: 14px;
+    }
+    
+    .weather-toggle-group {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin: 8px 0;
+    }
+    
+    .weather-toggle-label {
+      font-size: 12px;
+      color: var(--muted);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    
+    @media (max-width: 768px) {
+      .controls{grid-template-columns:1fr;gap:8px}
+      .grid.g3{grid-template-columns:1fr}
+      .grid.g4{grid-template-columns:1fr 1fr}
+      .input-group{flex-direction:column;align-items:stretch}
+      .crowdsource .grid.g2{grid-template-columns:1fr}
+      #map{height:280px}
+      #chart{height:280px!important;max-height:280px!important}
+      .panel{overflow:hidden}
+      .species-legend{flex-direction:column;gap:8px}
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <h1>🍄 BoletusLab® – Sistema Previsionale Micologico Multi-Specie</h1>
+      <span class="badge version-badge">v2.5.7</span>
+      <span class="badge scientific-badge">Algoritmi Scientifici Boletus spp.</span>
+      <span class="badge">Curve Sovrapposte</span>
+    </header>
+
+    <div class="panel">
+      <div class="controls">
+        <div>
+          <label>Località (geocoding)</label>
+          <input id="q" type="text" placeholder="Es. Abbadia San Salvatore" />
+        </div>
+        <div>
+          <label>Latitudine</label>
+          <input id="lat" type="number" step="0.0001" placeholder="Copia da Google Maps" />
+        </div>
+        <div>
+          <label>Longitudine</label>
+          <input id="lon" type="number" step="0.0001" placeholder="o clicca sulla mappa" />
+        </div>
+        <div>
+          <label>Habitat</label>
+          <select id="habitat">
+            <option value="">(auto da OSM)</option>
+            <option>castagno</option><option>faggio</option><option>quercia</option>
+            <option>conifere</option><option>misto</option><option>altro</option>
+          </select>
+          <div style="margin-top:8px;">
+            <label style="display:flex;align-items:center;gap:6px;font-size:11px;">
+              <input type="checkbox" id="advanced-lag" style="width:auto;">
+              🧬 Lag biologico avanzato (includi effetto esposizione)
+            </label>
+          </div>
+        </div>
+        <div>
+          <label>Esposizione</label>
+          <select id="aspect-mode">
+            <option value="auto">Automatico DEM</option>
+            <option value="manual">Manuale</option>
+            <option value="multi">Pianeggiante / Multi-esposizione</option>
+          </select>
+          <select id="aspect-octant" style="display:none;margin-top:4px;">
+            <option value="">Seleziona...</option>
+            <option value="N">Nord (N)</option>
+            <option value="NE">Nord-Est (NE)</option>
+            <option value="E">Est (E)</option>
+            <option value="SE">Sud-Est (SE)</option>
+            <option value="S">Sud (S)</option>
+            <option value="SW">Sud-Ovest (SW)</option>
+            <option value="W">Ovest (W)</option>
+            <option value="NW">Nord-Ovest (NW)</option>
+          </select>
+        </div>
+        <div>
+          <label>Ore sul campo</label>
+          <select id="hours">
+            <option>2</option><option selected>4</option><option>6</option><option>8</option>
+          </select>
+        </div>
+        <div style="display:flex;gap:8px;">
+          <button id="btnGeo" class="btn" title="Cerca">🔍 Cerca</button>
+        </div>
+      </div>
+      
+      <!-- Controlli meteo avanzati -->
+      <div class="weather-controls">
+        <h5>🌦️ Fonti Dati Meteorologici</h5>
+        <div class="weather-toggle-group">
+          <label class="weather-toggle-label">
+            <span class="toggle-switch">
+              <input type="checkbox" id="era5-toggle">
+              <span class="slider"></span>
+            </span>
+            🛰️ ERA5-Land (umidità suolo satellitare)
+          </label>
+          <span id="era5-status" class="chip">Disattivato</span>
+        </div>
+        <div style="font-size: 11px; color: var(--muted); margin-top: 8px;">
+          <strong>Primario:</strong> Open-Meteo (20d storici + 10d forecast) • 
+          <strong>Backup:</strong> Visual Crossing • 
+          <strong>Satellitare:</strong> ERA5-Land (opzionale)
+        </div>
+      </div>
+    </div>
+
+    <div class="panel">
+        <div id="map"></div>
+    </div>
+
+    <div class="grid g3">
+      <div class="panel section">
+        <h3>🎯 Indice Oggi</h3>
+        <div class="metric"><div class="k">Forza flush</div><div id="k-index" class="v">—</div></div>
+        <div class="hr"></div>
+        <div class="metric"><div class="k">Finestra migliore</div><div id="k-window" class="v">—</div></div>
+        <div style="margin-top:8px;">
+          <span id="k-model-version" class="chip">v2.5.7</span>
+          <span id="k-has-validations" class="chip">validazioni: —</span>
+        </div>
+        <div id="species-info" style="margin-top:12px;">
+          <div id="species-dominance" class="muted" style="font-size:12px;">Specie: —</div>
+        </div>
+      </div>
+      
+      <div class="panel section">
+        <h3>🔬 Affidabilità 5D</h3>
+        <div class="confidence-grid">
+          <div class="confidence-item">
+            <div class="confidence-label">Meteo</div>
+            <div id="conf-met" class="confidence-value">—</div>
+          </div>
+          <div class="confidence-item">
+            <div class="confidence-label">Eco</div>
+            <div id="conf-eco" class="confidence-value">—</div>
+          </div>
+          <div class="confidence-item">
+            <div class="confidence-label">Hydro</div>
+            <div id="conf-hydro" class="confidence-value">—</div>
+          </div>
+          <div class="confidence-item">
+            <div class="confidence-label">Atmo</div>
+            <div id="conf-atmo" class="confidence-value">—</div>
+          </div>
+          <div class="confidence-item">
+            <div class="confidence-label">Emp</div>
+            <div id="conf-emp" class="confidence-value">—</div>
+          </div>
+        </div>
+        <div class="hr"></div>
+        <div class="metric">
+          <div class="k">Overall</div>
+          <div id="conf-overall" class="v" style="color:var(--accent)">—</div>
+        </div>
+      </div>
+      
+      <div class="panel section">
+        <h3>🍄 Dimensioni & Raccolto</h3>
+        <div class="metric"><div class="k">Taglia media</div><div id="k-size" class="v">—</div></div>
+        <div class="metric"><div class="k">Range</div><div id="k-size-range" class="v">—</div></div>
+        <div class="hr"></div>
+        <div class="metric"><div class="k">Raccolto atteso</div><div id="k-harvest" class="v" style="font-size:18px">—</div></div>
+        <div class="muted" id="k-harvest-note" style="font-size:11px;margin-top:4px"></div>
+      </div>
+    </div>
+
+    <div class="panel section">
+      <h3>📈 Previsione Multi-Specie con Curve Sovrapposte</h3>
+      <div style="margin-bottom:8px;color:var(--muted);font-size:12px;">
+        ✨ <strong>BoletusLab v2.5.7:</strong> Curve probabilistiche per specie coesistenti • Lag specie-specifico • Algoritmi basati su letteratura scientifica
+      </div>
+      
+      <!-- Legenda specie -->
+      <div id="species-legend" class="species-legend" style="display:none;">
+        <!-- Sarà popolata dinamicamente -->
+      </div>
+      
+      <div class="lag-explanation" id="lag-explanation" style="display:none;">
+        💡 <strong>Fruttificazione Step-Function Multi-Specie:</strong> Curve sovrapposte mostrano timing diversi basati su lag biologico specie-specifico secondo letteratura scientifica.
+      </div>
+      <div style="width:100%;max-width:100%;overflow:hidden;position:relative;">
+        <canvas id="chart" style="width:100%!important;height:350px!important;max-width:100%!important;"></canvas>
+      </div>
+      <div id="chart-error" style="display:none;" class="error-debug">
+        Errore nel caricamento del grafico. Verifica la console per dettagli.
+      </div>
+    </div>
+
+    <div class="panel section">
+      <h3>🧭 Analisi Biologica Scientifica Dettagliata v2.5.7</h3>
+      <div id="field-analysis" class="field-analysis">
+        <p class="muted">Esegui un'analisi per vedere i dettagli scientifici con algoritmi BoletusLab.</p>
+      </div>
+    </div>
+
+    <div class="panel section">
+      <h3>🌧️ Dati Meteorologici Completi e Eventi Piovosi</h3>
+      <div class="grid g2">
+        <div>
+          <h4>📊 Ultimi 20 giorni (Pioggia + Temperature)</h4>
+          <div id="rain-past-table">
+            <p class="muted">In attesa di analisi...</p>
+          </div>
+        </div>
+        <div>
+          <h4>🔮 Prossimi 10 giorni (Pioggia + Temperature)</h4>
+          <div id="rain-future-table">
+            <p class="muted">In attesa di analisi...</p>
+          </div>
+        </div>
+      </div>
+      <div style="margin-top:16px;">
+        <h4>💧 Eventi di Flush con Lag Specie-Specifico</h4>
+        <div id="flush-events" class="events">
+          <p class="muted">In attesa di analisi...</p>
+        </div>
+        <div id="cumulative-moisture-info" style="margin-top:12px;">
+          <h4>🌊 Sistema Meteorologico Ibrido + ERA5-Land</h4>
+          <div id="cumulative-moisture-value" class="muted">In attesa di calcolo qualità weather...</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel section crowdsource">
+      <h3>🧬 Contribuisci alla Ricerca Scientifica</h3>
+      <p style="margin-bottom:20px;color:#cfe6ff;">Aiuta a perfezionare gli algoritmi BoletusLab condividendo le tue osservazioni. I dati alimentano l'algoritmo di machine learning per migliorare la previsione della fruttificazione fungina multi-specie.</p>
+      
+      <div class="grid g2">
+        <div>
+          <h4>✅ Segnala Ritrovamento</h4>
+          <div class="input-group">
+            <select id="sighting-species">
+              <option>aereus</option><option>reticulatus</option><option>edulis</option><option>pinophilus</option><option>altro</option>
+            </select>
+            <input type="number" id="sighting-quantity" placeholder="Quantità" min="1" max="50" value="1">
+            <input type="number" id="sighting-size" placeholder="Taglia media (cm)" min="2" max="20" step="0.5">
+          </div>
+          <div class="input-group">
+            <input type="text" id="sighting-habitat" placeholder="Habitat osservato (es. faggio misto)">
+            <select id="sighting-confidence">
+              <option value="0.9">Molto sicuro</option><option value="0.8" selected>Sicuro</option><option value="0.6">Abbastanza sicuro</option><option value="0.4">Incerto</option>
+            </select>
+          </div>
+          <div class="input-group">
+            <input type="text" id="sighting-notes" placeholder="Note aggiuntive (opzionale)">
+            <button id="btn-report-sighting" class="btn success">🔬 Segnala</button>
+          </div>
+        </div>
+        
+        <div>
+          <h4>❌ Segnala Ricerca Vuota</h4>
+          <div class="input-group">
+            <input type="number" id="no-find-hours" placeholder="Ore cercate" min="0.5" max="12" step="0.5" value="2">
+            <select id="no-find-method">
+              <option>visual</option><option>systematic</option><option>random</option>
+            </select>
+            <select id="no-find-thoroughness">
+              <option value="1">Superficiale</option><option value="2">Normale</option><option value="3" selected>Accurata</option><option value="4">Molto accurata</option><option value="5">Sistematica</option>
+            </select>
+          </div>
+          <div class="input-group">
+            <input type="text" id="no-find-habitat" placeholder="Habitat cercato">
+            <input type="text" id="no-find-notes" placeholder="Note (condizioni, meteo, ecc.)">
+            <button id="btn-report-no-finding" class="btn secondary">🔬 Segnala</button>
+          </div>
+        </div>
+      </div>
+      
+      <div style="margin-top:24px;">
+        <h4>📈 Statistiche Validazioni Scientifiche</h4>
+        <div id="validation-stats" class="stats-grid">
+          <div class="stat-item"><div class="stat-value">—</div><div class="stat-label">Segnalazioni positive</div></div>
+          <div class="stat-item"><div class="stat-value">—</div><div class="stat-label">Ricerche negative</div></div>
+          <div class="stat-item"><div class="stat-value">—</div><div class="stat-label">Predizioni totali</div></div>
+          <div class="stat-item"><div class="stat-value">—</div><div class="stat-label">Accuratezza media</div></div>
+        </div>
+      </div>
+    </div>
+
+    
+<footer>
+  <p>🍄 <strong>BoletusLab® v2.5.7</strong> – Sistema previsionale micologico multi-specie per fruttificazione <em>Boletus</em> spp.</p>
+  <p><strong>Tecnologie:</strong> Sistema meteorologico ibrido Visual Crossing + Open-Meteo + ERA5-Land • Curve sovrapposte per coesistenza specie • Lag biologico specie-specifico • Umidità cumulativa</p>
+  <p><strong>Base scientifica:</strong> Mumcu Küçüker (2019), Martínez-Peña et al. (2012), Parladé et al. (2017), Tahvanainen et al. (2016), de la Varga et al. (2013), Viitanen (1997)</p>
+  <p><strong>Sviluppato da Antonio Pio D'Aloia</strong> • FastAPI • NumPy/SciPy • SQLite • Docker • Machine Learning • Leaflet.js</p>
+  <p><small>BoletusLab® è un marchio registrato. Tutti i diritti riservati.</small></p>
+</footer>
+
+  </div>
+
+  <div id="notification" class="notification"></div>
+
+  <!-- LIBRARY LOADING ORDER FIXED -->
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@3.9.1/dist/chart.min.js"></script>
+
+  <script>
+    // === GLOBAL STATE ===
+    const API_BASE = window.location.hostname === 'localhost' ? 'http://localhost:8787' : '';
+    
+    let currentChart = null;
+    let currentLocation = { lat: null, lon: null };
+    let map = null;
+    let mapMarker = null;
+    let currentSpeciesData = null; // Per gestire dati multi-specie
+
+    // Colori per le specie
+    const SPECIES_COLORS = {
+      'edulis': '#62d5b4',
+      'reticulatus': '#ff9500', 
+      'aereus': '#ff6b6b',
+      'pinophilus': '#8bb7ff',
+      'mixed': '#ffc857'
+    };
+
+    // === DEBUG SYSTEM ===
+    function debugLog(message, data = null) {
+      const timestamp = new Date().toISOString().substr(11, 8);
+      console.log(`[${timestamp}] ${message}`, data || '');
+    }
+
+    // === CHART.JS VERIFICATION ===
+    function checkChartJS() {
+      if (typeof Chart === 'undefined') {
+        console.error('❌ Chart.js non caricato!');
+        document.getElementById('chart-error').style.display = 'block';
+        document.getElementById('chart-error').textContent = 'Chart.js non disponibile. Ricarica la pagina.';
+        return false;
+      }
+      console.log('✅ Chart.js caricato correttamente');
+      return true;
+    }
+
+    // === UTILITIES ===
+    function showNotification(message, type = 'success') {
+      const notification = document.getElementById('notification');
+      if (!notification) return;
+      
+      notification.textContent = message;
+      notification.className = `notification ${type} show`;
+      debugLog(`Notification [${type}]:`, message);
+      
+      setTimeout(() => {
+        notification.classList.remove('show');
+      }, type === 'error' ? 6000 : 4000);
+    }
+
+    function setLoading(isLoading) {
+      document.body.classList.toggle('loading', isLoading);
+    }
+
+    function formatDate(dateStr) {
+      try {
+        if (typeof dateStr !== 'string') return String(dateStr);
+        if (dateStr.includes('+') || dateStr.includes('d')) return dateStr;
+        
+        const date = new Date(dateStr);
+        if (isNaN(date.getTime())) return dateStr;
+        
+        return date.toLocaleDateString('it-IT', { 
+          month: 'short', day: 'numeric' 
+        });
+      } catch (error) {
+        debugLog('Date format error:', error);
+        return String(dateStr);
       }
     }
 
-    function updateERA5StatusDetailed(data) {
+    // === API CALLS ===
+    async function geocodeLocation(query) {
       try {
-        const qualityDiv = document.getElementById('cumulative-moisture-value');
-        const statusSpan = document.getElementById('era5-status');
+        debugLog('Geocoding:', query);
+        const response = await fetch(`${API_BASE}/api/geocode?q=${encodeURIComponent(query)}`);
+        if (!response.ok) throw new Error('Geocoding fallito');
+        const result = await response.json();
+        debugLog('Geocoding result:', result);
+        return result;
+      } catch (error) {
+        throw new Error(`Errore geocoding: ${error.message}`);
+      }
+    }
+
+    async function getAnalysis(lat, lon, habitat = '', hours = 4) {
+      try {
+        debugLog('Starting multi-species analysis:', { lat, lon, habitat, hours });
+        const params = new URLSearchParams({
+          lat: lat.toString(),
+          lon: lon.toString(),
+          habitat: habitat,
+          hours: hours.toString(),
+          autohabitat: habitat ? '0' : '1'
+        });
         
-        if (qualityDiv) {
-          const weatherSources = data.weather_sources || {};
-          const vcDays = weatherSources.visual_crossing_days || 0;
-          const omDays = weatherSources.open_meteo_past_days || 0;
-          const weatherQuality = data.weather_quality_score || 0.5;
-          
-          // Determina status ERA5-Land dal response
-          let era5Status = 'Disattivato';
-          let era5Icon = '⏸️';
-          let statusClass = 'chip';
-          
-          if (data.era5_status) {
-            if (data.era5_status === 'success') {
-              era5Status = 'Attivo ✅';
-              era5Icon = '🛰️';
-              statusClass = 'chip ok';
-            } else if (data.era5_status === 'failed') {
-              era5Status = 'Fallito ⚠️';
-              era5Icon = '❌';
-              statusClass = 'chip warn';
-            } else if (data.era5_status === 'disabled') {
-              era5Status = 'Disattivato';
-              era5Icon = '⏸️';
-              statusClass = 'chip';
-            }
-          } else {
-            // Se non c'è era5_status nel response, determina dallo stato toggle
-            const era5Toggle = document.getElementById('era5-toggle');
-            if (era5Toggle && era5Toggle.checked) {
-              era5Status = 'Stato Sconosciuto ❓';
-              era5Icon = '❓';
-              statusClass = 'chip warn';
-            }
-          }
-          
-          // Aggiorna status chip
-          if (statusSpan) {
-            statusSpan.textContent = era5Status;
-            statusSpan.className = statusClass;
-          }
-          
-          const qualityColor = weatherQuality >= 0.8 ? '#66e28a' : weatherQuality >= 0.6 ? '#ffc857' : '#ff6b6b';
-          
-          qualityDiv.innerHTML = `
-            <strong>Qualità Weather Multi-Fonte:</strong> <span style="color:${qualityColor}">${weatherQuality.toFixed(2)}</span>/1.00<br>
-            <strong>Fonti:</strong> Visual Crossing (${vcDays}d) + Open-Meteo (${omDays}d)<br>
-            <strong>${era5Icon} ERA5-Land:</strong> ${era5Status}<br>
-            <strong>Umidità Cumulativa:</strong> ${data.cumulative_moisture_index?.toFixed(1) || 0} mm
-          `;
-          qualityDiv.className = weatherQuality >= 0.8 ? 'chip ok' : weatherQuality >= 0.6 ? 'chip warn' : 'chip bad';
+        // Aggiungi parametri esposizione
+        try {
+          const aspectMode = document.getElementById('aspect-mode').value;
+          const aspectOctant = document.getElementById('aspect-octant').value;
+          params.set('autoaspect', aspectMode === 'auto' ? '1' : '0');
+          params.set('aspect', aspectMode === 'manual' ? aspectOctant : (aspectMode === 'multi' ? 'FLAT' : ''));
+          // Lag avanzato
+          try { params.set('advanced_lag', document.getElementById('advanced-lag').checked ? '1' : '0'); } catch (e) {}
+        } catch (e) { 
+          debugLog('Aspect params error:', e); 
+        }
+
+        // NUOVO: Aggiungi parametro ERA5-Land
+        try {
+          const era5Enabled = document.getElementById('era5-toggle').checked;
+          params.set('use_era5', era5Enabled ? '1' : '0');
+        } catch (e) {
+          debugLog('ERA5 toggle error:', e);
         }
         
-        debugLog('ERA5 status updated:', data.era5_status);
+        const response = await fetch(`${API_BASE}/api/score?${params}`);
+        if (!response.ok) {
+            const errData = await response.json().catch(() => ({ detail: 'Errore generico' }));
+            throw new Error(`HTTP ${response.status}: ${errData.detail || 'Errore sconosciuto'}`);
+        }
+        const result = await response.json();
+        debugLog('Multi-species analysis result:', {
+          hasIndex: !!result.index,
+          hasForecast: Array.isArray(result.forecast),
+          forecastLength: result.forecast?.length,
+          hasFlushEvents: Array.isArray(result.flush_events),
+          eventsCount: result.flush_events?.length,
+          hasSpeciesLag: !!result.species,
+          hasSpeciesCoexistence: !!result.species_probabilities,
+          hasMultipleForecasts: !!result.species_forecasts,
+          hasCumulativeMoisture: !!result.cumulative_moisture_index,
+          weatherQuality: result.weather_quality_score,
+          weatherSources: result.weather_sources
+        });
+        return result;
       } catch (error) {
-        debugLog('Error updating ERA5 status:', error);
+        debugLog('Multi-species analysis error:', error);
+        throw new Error(`Errore analisi sistema multi-specie: ${error.message}`);
+      }
+    }
+
+    async function reportSighting(data) {
+      try {
+        debugLog('Reporting sighting:', data);
+        const response = await fetch(`${API_BASE}/api/report-sighting`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          body: new URLSearchParams(data)
+        });
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        return await response.json();
+      } catch (error) {
+        throw new Error(`Errore segnalazione: ${error.message}`);
+      }
+    }
+
+    async function reportNoFinding(data) {
+      try {
+        debugLog('Reporting no finding:', data);
+        const response = await fetch(`${API_BASE}/api/report-no-findings`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          body: new URLSearchParams(data)
+        });
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        return await response.json();
+      } catch (error) {
+        throw new Error(`Errore report: ${error.message}`);
+      }
+    }
+
+    async function getValidationStats() {
+      try {
+        const response = await fetch(`${API_BASE}/api/validation-stats`);
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        return await response.json();
+      } catch (error) {
+        console.warn('Errore stats validazione:', error);
+        return { error: error.message };
+      }
+    }
+
+    // === UI UPDATES ===
+    function updateKPIs(data) {
+      debugLog('Updating KPIs multi-species:', data);
+      
+      try {
+        document.getElementById('k-index').textContent = `${data.index}/100`;
+        
+        const bestWindow = data.best_window;
+        if (bestWindow && bestWindow.mean > 0) {
+          document.getElementById('k-window').textContent = `Giorni ${bestWindow.start + 1}-${bestWindow.end + 1}`;
+        } else {
+          document.getElementById('k-window').textContent = 'Nessuna';
+        }
+
+        const conf = data.confidence_detailed;
+        if (conf) {
+          document.getElementById('conf-met').textContent = conf.meteorological?.toFixed(2) || '—';
+          document.getElementById('conf-eco').textContent = conf.ecological?.toFixed(2) || '—';
+          document.getElementById('conf-hydro').textContent = conf.hydrological?.toFixed(2) || '—';
+          document.getElementById('conf-atmo').textContent = conf.atmospheric?.toFixed(2) || '—';
+          document.getElementById('conf-emp').textContent = conf.empirical?.toFixed(2) || '—';
+          document.getElementById('conf-overall').textContent = conf.overall?.toFixed(2) || '—';
+        }
+
+        document.getElementById('k-harvest').textContent = data.harvest_estimate || '—';
+        document.getElementById('k-harvest-note').textContent = data.harvest_note || '';
+        document.getElementById('k-size').textContent = data.size_cm ? `${data.size_cm} cm` : '—';
+        document.getElementById('k-size-range').textContent = data.size_range_cm ? 
+          `${data.size_range_cm[0]}-${data.size_range_cm[1]} cm` : '—';
+
+        const hasValidations = data.has_local_validations ? 'Sì' : 'No';
+        document.getElementById('k-has-validations').textContent = `validazioni: ${hasValidations}`;
+        
+        // NUOVO: Gestione specie multiple
+        updateSpeciesInfo(data);
+        
+        // NUOVO: Mostra qualità e fonti weather del sistema ibrido + ERA5
+        if (data.weather_quality_score !== undefined) {
+          const qualityDiv = document.getElementById('cumulative-moisture-value');
+          if (qualityDiv) {
+            const weatherSources = data.weather_sources || {};
+            const vcDays = weatherSources.visual_crossing_days || 0;
+            const omDays = weatherSources.open_meteo_past_days || 0;
+            const era5Status = data.era5_enabled ? 'Attivo' : 'Disattivo';
+            const qualityColor = data.weather_quality_score >= 0.8 ? '#66e28a' : data.weather_quality_score >= 0.6 ? '#ffc857' : '#ff6b6b';
+            
+            qualityDiv.innerHTML = `
+              <strong>Qualità Weather Multi-Fonte:</strong> <span style="color:${qualityColor}">${data.weather_quality_score.toFixed(2)}</span>/1.00<br>
+              <strong>Fonti:</strong> Visual Crossing (${vcDays}d) + Open-Meteo (${omDays}d) + ERA5-Land (${era5Status})<br>
+              <strong>Umidità Cumulativa:</strong> ${data.cumulative_moisture_index?.toFixed(1) || 0} mm
+            `;
+            qualityDiv.className = data.weather_quality_score >= 0.8 ? 'chip ok' : data.weather_quality_score >= 0.6 ? 'chip warn' : 'chip bad';
+          }
+        }
+        
+        debugLog('KPIs updated successfully with multi-species system');
+      } catch (error) {
+        debugLog('Error updating KPIs:', error);
+        showNotification('Errore aggiornamento KPI', 'error');
+      }
+    }
+
+    function updateSpeciesInfo(data) {
+      try {
+        const speciesDiv = document.getElementById('species-dominance');
+        if (!speciesDiv) return;
+
+        // Se abbiamo probabilità multiple, mostra coesistenza
+        if (data.species_probabilities && Object.keys(data.species_probabilities).length > 1) {
+          const sorted = Object.entries(data.species_probabilities)
+            .sort((a, b) => b[1] - a[1])
+            .filter(([species, prob]) => prob > 0.1); // Solo specie significative
+
+          if (sorted.length > 1) {
+            const speciesText = sorted.map(([species, prob]) => 
+              `<em>B. ${species}</em> (${Math.round(prob * 100)}%)`
+            ).join(' + ');
+            speciesDiv.innerHTML = `<strong>Coesistenza:</strong> ${speciesText}`;
+            
+            // Mostra legenda specie
+            updateSpeciesLegend(sorted);
+            return;
+          }
+        }
+
+        // Specie singola dominante
+        const species = data.species || 'reticulatus';
+        speciesDiv.innerHTML = `<strong>Specie dominante:</strong> <em>Boletus ${species}</em>`;
+        
+        // Nascondi legenda per specie singola
+        document.getElementById('species-legend').style.display = 'none';
+        
+      } catch (error) {
+        debugLog('Error updating species info:', error);
+      }
+    }
+
+    function updateSpeciesLegend(speciesProbabilities) {
+      try {
+        const legendDiv = document.getElementById('species-legend');
+        if (!legendDiv || !speciesProbabilities || speciesProbabilities.length <= 1) {
+          legendDiv.style.display = 'none';
+          return;
+        }
+
+        let html = '';
+        speciesProbabilities.forEach(([species, probability]) => {
+          const color = SPECIES_COLORS[species] || SPECIES_COLORS.mixed;
+          const percentage = Math.round(probability * 100);
+          
+          html += `
+            <div class="species-legend-item">
+              <div class="species-color-dot" style="background-color: ${color}"></div>
+              <span><em>B. ${species}</em></span>
+              <span class="species-probability">${percentage}%</span>
+            </div>
+          `;
+        });
+
+        legendDiv.innerHTML = html;
+        legendDiv.style.display = 'flex';
+        
+        debugLog('Species legend updated:', speciesProbabilities);
+      } catch (error) {
+        debugLog('Error updating species legend:', error);
+      }
+    }
+
+    function updateChart(forecast, data = null) {
+      debugLog('Updating multi-species chart:', forecast);
+      
+      if (!checkChartJS()) {
+        return;
+      }
+      
+      try {
+        // Verifica che forecast sia un array valido
+        if (!Array.isArray(forecast) || forecast.length === 0) {
+          debugLog('❌ Forecast non valido:', forecast);
+          document.getElementById('chart-error').style.display = 'block';
+          document.getElementById('chart-error').textContent = 'Dati previsione non disponibili dal sistema multi-specie';
+          return;
+        }
+        
+        const ctx = document.getElementById('chart');
+        if (!ctx) {
+          debugLog('❌ Canvas chart non trovato');
+          return;
+        }
+        
+        // Distruggi grafico precedente
+        if (currentChart) {
+          currentChart.destroy();
+          currentChart = null;
+        }
+        
+        const labels = forecast.map((_, i) => `Giorno ${i + 1}`);
+        const datasets = [];
+        
+        // GESTIONE MULTI-SPECIE
+        if (data && data.species_forecasts && Object.keys(data.species_forecasts).length > 1) {
+          // CURVE MULTIPLE SOVRAPPOSTE
+          const speciesProbabilities = data.species_probabilities || {};
+          
+          Object.entries(data.species_forecasts).forEach(([species, speciesForecast]) => {
+            const probability = speciesProbabilities[species] || 0;
+            if (probability < 0.1) return; // Skip specie con probabilità troppo bassa
+            
+            const color = SPECIES_COLORS[species] || SPECIES_COLORS.mixed;
+            const alpha = 0.4 + (probability * 0.6); // Trasparenza basata su probabilità
+            
+            datasets.push({
+              label: `🍄 B. ${species} (${Math.round(probability * 100)}%)`,
+              data: speciesForecast,
+              borderColor: color,
+              backgroundColor: color + Math.floor(alpha * 255).toString(16).padStart(2, '0'),
+              borderWidth: 3,
+              fill: true,
+              tension: 0.2,
+              pointBackgroundColor: color,
+              pointBorderColor: '#ffffff',
+              pointBorderWidth: 2,
+              pointRadius: 5,
+              pointHoverRadius: 8
+            });
+          });
+          
+          // Mostra spiegazione curve multiple
+          const lagExplanation = document.getElementById('lag-explanation');
+          if (lagExplanation) {
+            lagExplanation.innerHTML = `💡 <strong>Curve Sovrapposte Multi-Specie:</strong> Ogni curva rappresenta una specie con timing di fruttificazione diverso. Le aree colorate mostrano la probabilità di coesistenza basata su letteratura scientifica.`;
+            lagExplanation.style.display = 'block';
+          }
+          
+        } else {
+          // CURVA SINGOLA (sistema tradizionale)
+          const species = data?.species || 'reticulatus';
+          const color = SPECIES_COLORS[species] || SPECIES_COLORS.mixed;
+          
+          // CALCOLA ZONE ROSSE DI FRUTTIFICAZIONE per specie singola
+          let fruitingZones = [];
+          if (data && data.flush_events) {
+            const pastDays = 20;
+            data.flush_events.forEach(event => {
+              if (!event.observed) {
+                const eventIdx = event.event_day_index;
+                const lagDays = event.lag_days || 8;
+                const fruitingDay = eventIdx + lagDays - pastDays;
+                
+                if (fruitingDay >= 0 && fruitingDay < forecast.length) {
+                  fruitingZones.push({
+                    start: Math.max(0, fruitingDay - 1),
+                    end: Math.min(forecast.length - 1, fruitingDay + 2),
+                    peak: fruitingDay
+                  });
+                }
+              }
+            });
+          }
+          
+          // Dataset principale
+          datasets.push({
+            label: `🍄 B. ${species} (Dominante)`,
+            data: forecast,
+            borderColor: color,
+            backgroundColor: color + '26',
+            borderWidth: 3,
+            fill: true,
+            tension: 0.2,
+            pointBackgroundColor: forecast.map((_, i) => {
+              const inFruitingZone = fruitingZones.some(zone => i >= zone.start && i <= zone.end);
+              return inFruitingZone ? '#ff6b6b' : color;
+            }),
+            pointBorderColor: '#ffffff',
+            pointBorderWidth: 2,
+            pointRadius: forecast.map((_, i) => {
+              const inFruitingZone = fruitingZones.some(zone => i >= zone.start && i <= zone.end);
+              return inFruitingZone ? 7 : 5;
+            }),
+            pointHoverRadius: 8
+          });
+          
+          // Zone rosse per specie singola
+          fruitingZones.forEach((zone, idx) => {
+            const zoneData = forecast.map((value, i) => {
+              return (i >= zone.start && i <= zone.end) ? value : null;
+            });
+            
+            datasets.push({
+              label: `🔴 Fruttificazione ${idx + 1}`,
+              data: zoneData,
+              borderColor: '#ff6b6b',
+              backgroundColor: 'rgba(255, 107, 107, 0.3)',
+              borderWidth: 4,
+              fill: true,
+              tension: 0.1,
+              pointBackgroundColor: '#ff6b6b',
+              pointBorderColor: '#ffffff',
+              pointBorderWidth: 2,
+              pointRadius: 6,
+              pointHoverRadius: 8
+            });
+          });
+        }
+        
+        // CHART.JS v3.9.1 SYNTAX
+        currentChart = new Chart(ctx, {
+          type: 'line',
+          data: {
+            labels: labels,
+            datasets: datasets
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            layout: {
+              padding: {
+                left: 15,
+                right: 15,
+                top: 15,
+                bottom: 15
+              }
+            },
+            animation: {
+              duration: 800,
+              easing: 'easeInOutQuart'
+            },
+            plugins: { 
+              legend: { 
+                display: true,
+                position: 'top',
+                labels: {
+                  color: '#8aa0b6',
+                  font: { size: 12 },
+                  filter: function(legendItem, chartData) {
+                    return legendItem.datasetIndex === 0 || 
+                           chartData.datasets[legendItem.datasetIndex].data.some(v => v !== null);
+                  }
+                }
+              },
+              tooltip: {
+                callbacks: {
+                  afterLabel: function(context) {
+                    if (context.datasetIndex > 0 && context.dataset.label.includes('Fruttificazione')) {
+                      return '🔴 USCITA PORCINI PREVISTA!';
+                    }
+                    if (context.dataset.label.includes('B.')) {
+                      return `Specie: ${context.dataset.label}`;
+                    }
+                    return '';
+                  }
+                }
+              }
+            },
+            scales: {
+              y: { 
+                beginAtZero: true, 
+                max: 100,
+                min: 0,
+                grid: { 
+                  color: 'rgba(255,255,255,0.08)',
+                  drawBorder: false
+                }, 
+                ticks: { 
+                  color: '#8aa0b6', 
+                  font: { size: 12 },
+                  maxTicksLimit: 8
+                }
+              },
+              x: { 
+                grid: { 
+                  color: 'rgba(255,255,255,0.08)',
+                  drawBorder: false
+                }, 
+                ticks: { 
+                  color: '#8aa0b6', 
+                  font: { size: 12 },
+                  maxRotation: 0
+                }
+              }
+            },
+            elements: { 
+              point: { hoverRadius: 8 },
+              line: { borderJoinStyle: 'round' }
+            },
+            interaction: {
+              intersect: false,
+              mode: 'index'
+            }
+          }
+        });
+        
+        // Nascondi messaggio errore
+        document.getElementById('chart-error').style.display = 'none';
+        debugLog('✅ Multi-species chart created successfully with', forecast.length, 'data points');
+        
+      } catch (error) {
+        debugLog('❌ Error creating multi-species chart:', error);
+        document.getElementById('chart-error').style.display = 'block';
+        document.getElementById('chart-error').textContent = `Errore grafico sistema multi-specie: ${error.message}`;
       }
     }
 
@@ -303,12 +1358,6 @@ document.getElementById('chart-error').textContent = `Errore grafico: ${error.me
           nella stessa area. Le specie possono fruttificare in zone leggermente diverse anche a pochi metri di distanza.</li>
           <li><strong>Timing differenziato:</strong> Pianifica visite multiple nei prossimi giorni, 
           poiché ogni specie ha il proprio lag biologico specifico.</li>
-          <li><strong>Interattività:</strong> Clicca sui punti del grafico per vedere raccolto dettagliato previsto per ogni giorno.</li>
-        `;
-      } else {
-        html += `
-          <li><strong>Grafico interattivo:</strong> Clicca sui punti della curva per vedere raccolto atteso dettagliato, 
-          momento migliore per la ricerca e condizioni specifiche per ogni giorno.</li>
         `;
       }
 
@@ -356,7 +1405,6 @@ document.getElementById('chart-error').textContent = `Errore grafico: ${error.me
         <div class="return-advice">
           <strong>💡 Ricorda:</strong> I modelli scientifici forniscono probabilità, non certezze. 
           L'esperienza sul campo e la conoscenza locale rimangono fondamentali per il successo della ricerca micologica.
-          Utilizza l'interattività del grafico per pianificare al meglio le tue uscite.
         </div>
       `;
 
@@ -393,8 +1441,8 @@ document.getElementById('chart-error').textContent = `Errore grafico: ${error.me
       const statusSpan = document.getElementById('era5-status');
       if (statusSpan) {
         if (enabled) {
-          statusSpan.textContent = 'Attivato';
-          statusSpan.className = 'chip warn'; // Giallo fino a conferma dal backend
+          statusSpan.textContent = 'Attivo';
+          statusSpan.className = 'chip ok';
         } else {
           statusSpan.textContent = 'Disattivato';
           statusSpan.className = 'chip';
@@ -459,7 +1507,7 @@ document.getElementById('chart-error').textContent = `Errore grafico: ${error.me
             const habitat = document.getElementById('habitat').value;
             const hours = parseInt(document.getElementById('hours').value);
 
-            debugLog('🚀 Starting analysis with popup functionality:', { lat, lon, habitat, hours });
+            debugLog('🚀 Starting multi-species analysis with ERA5-Land:', { lat, lon, habitat, hours });
             const data = await getAnalysis(lat, lon, habitat, hours);
             
             // Salva dati per uso globale
@@ -480,7 +1528,7 @@ document.getElementById('chart-error').textContent = `Errore grafico: ${error.me
             } else {
               debugLog('❌ Forecast mancante o non valido:', data.forecast);
               document.getElementById('chart-error').style.display = 'block';
-              document.getElementById('chart-error').textContent = 'Dati previsione non ricevuti dal sistema';
+              document.getElementById('chart-error').textContent = 'Dati previsione non ricevuti dal sistema multi-specie';
             }
             
             updateWeatherTables(data);
@@ -489,15 +1537,13 @@ document.getElementById('chart-error').textContent = `Errore grafico: ${error.me
             
             const weatherSources = data.weather_sources ? Object.keys(data.weather_sources).join(', ') : 'unknown';
             const weatherQuality = data.weather_quality_score ? data.weather_quality_score.toFixed(2) : '?';
-            const era5Status = data.era5_status === 'success' ? 'con ERA5-Land ✅' : 
-                              data.era5_status === 'failed' ? 'ERA5-Land fallito ⚠️' : 
-                              'senza ERA5-Land';
+            const era5Status = data.era5_enabled ? 'con ERA5-Land' : 'senza ERA5-Land';
             
             // Messaggio dinamico per multi-specie
             let successMessage = '';
             if (data.species_probabilities && Object.keys(data.species_probabilities).length > 1) {
               const speciesList = Object.keys(data.species_probabilities).join(', ');
-              successMessage = `✅ Analisi completata: ${data.index}/100 per coesistenza ${speciesList} (qualità: ${weatherQuality}, ${era5Status})`;
+              successMessage = `✅ Analisi Multi-Specie completata: ${data.index}/100 per coesistenza ${speciesList} (qualità: ${weatherQuality}, ${era5Status})`;
             } else {
               successMessage = `✅ Analisi BoletusLab completata: ${data.index}/100 per ${data.species || 'specie sconosciuta'} (qualità: ${weatherQuality}, ${era5Status})`;
             }
@@ -505,7 +1551,7 @@ document.getElementById('chart-error').textContent = `Errore grafico: ${error.me
             showNotification(successMessage);
 
         } catch (error) {
-            debugLog('❌ Analysis failed:', error);
+            debugLog('❌ Multi-species analysis failed:', error);
             showNotification(error.message, 'error');
         } finally {
             setLoading(false);
@@ -572,14 +1618,14 @@ document.getElementById('chart-error').textContent = `Errore grafico: ${error.me
     
     // === INIZIALIZZAZIONE ===
     document.addEventListener('DOMContentLoaded', function() {
-      debugLog('🔄 DOM loaded, initializing BoletusLab with popup functionality v2.5.7...');
+      debugLog('🔄 DOM loaded, initializing BoletusLab Multi-Species v2.5.7...');
       
       // Verifica librerie
       setTimeout(() => {
         if (!checkChartJS()) {
           showNotification('⚠️ Errore: Chart.js non caricato correttamente', 'error');
         } else {
-          debugLog('✅ All libraries loaded successfully for BoletusLab system');
+          debugLog('✅ All libraries loaded successfully for BoletusLab multi-species system');
         }
       }, 1000);
       
@@ -602,7 +1648,7 @@ document.getElementById('chart-error').textContent = `Errore grafico: ${error.me
             mapMarker = L.marker(e.latlng).addTo(map);
           }
           
-          showNotification('🔬 Coordinate selezionate. Avvio analisi...', 'success');
+          showNotification('🔬 Coordinate selezionate. Avvio analisi multi-specie...', 'success');
           handleAnalysis();
         });
         
@@ -662,1334 +1708,7 @@ document.getElementById('chart-error').textContent = `Errore grafico: ${error.me
       // Carica statistiche validazione
       updateValidationStats();
       
-      debugLog('🎉 Initialization completed - BoletusLab v2.5.7 Sistema Previsionale Micologico ready!');
+      debugLog('🎉 Initialization completed - BoletusLab Multi-Species v2.5.7 Sistema Previsionale Micologico ready!');
     });
-
-    // Esponi funzione globale per chiusura popup
-    window.closeDayPopup = closeDayPopup;
   </script>
 </body>
-</html>            <select id="sighting-confidence">
-              <option value="0.9">Molto sicuro</option><option value="0.8" selected>Sicuro</option><option value="0.6">Abbastanza sicuro</option><option value="0.4">Incerto</option>
-            </select>
-          </div>
-          <div class="input-group">
-            <input type="text" id="sighting-notes" placeholder="Note aggiuntive (opzionale)">
-            <button id="btn-report-sighting" class="btn success">🔬 Segnala</button>
-          </div>
-        </div>
-        
-        <div>
-          <h4>❌ Segnala Ricerca Vuota</h4>
-          <div class="input-group">
-            <input type="number" id="no-find-hours" placeholder="Ore cercate" min="0.5" max="12" step="0.5" value="2">
-            <select id="no-find-method">
-              <option>visual</option><option>systematic</option><option>random</option>
-            </select>
-            <select id="no-find-thoroughness">
-              <option value="1">Superficiale</option><option value="2">Normale</option><option value="3" selected>Accurata</option><option value="4">Molto accurata</option><option value="5">Sistematica</option>
-            </select>
-          </div>
-          <div class="input-group">
-            <input type="text" id="no-find-habitat" placeholder="Habitat cercato">
-            <input type="text" id="no-find-notes" placeholder="Note (condizioni, meteo, ecc.)">
-            <button id="btn-report-no-finding" class="btn secondary">🔬 Segnala</button>
-          </div>
-        </div>
-      </div>
-      
-      <div style="margin-top:24px;">
-        <h4>📈 Statistiche Validazioni Scientifiche</h4>
-        <div id="validation-stats" class="stats-grid">
-          <div class="stat-item"><div class="stat-value">—</div><div class="stat-label">Segnalazioni positive</div></div>
-          <div class="stat-item"><div class="stat-value">—</div><div class="stat-label">Ricerche negative</div></div>
-          <div class="stat-item"><div class="stat-value">—</div><div class="stat-label">Predizioni totali</div></div>
-          <div class="stat-item"><div class="stat-value">—</div><div class="stat-label">Accuratezza media</div></div>
-        </div>
-      </div>
-    </div>
-
-    
-<footer>
-  <p>🍄 <strong>BoletusLab® v2.5.7</strong> – Sistema previsionale micologico multi-specie per fruttificazione <em>Boletus</em> spp.</p>
-  <p><strong>Tecnologie:</strong> Sistema meteorologico ibrido Visual Crossing + Open-Meteo + ERA5-Land • Curve sovrapposte per coesistenza specie • Lag biologico specie-specifico • Umidità cumulativa</p>
-  <p><strong>Base scientifica:</strong> Mumcu Küçüker (2019), Martínez-Peña et al. (2012), Parladé et al. (2017), Tahvanainen et al. (2016), de la Varga et al. (2013), Viitanen (1997)</p>
-  <p><strong>Sviluppato da Antonio Pio D'Aloia</strong> • FastAPI • NumPy/SciPy • SQLite • Docker • Machine Learning • Leaflet.js</p>
-  <p><small>BoletusLab® è un marchio registrato. Tutti i diritti riservati.</small></p>
-</footer>
-
-  </div>
-
-  <div id="notification" class="notification"></div>
-
-  <!-- LIBRARY LOADING ORDER FIXED -->
-  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
-  <script src="https://cdn.jsdelivr.net/npm/chart.js@3.9.1/dist/chart.min.js"></script>
-
-  <script>
-    // === GLOBAL STATE ===
-    const API_BASE = window.location.hostname === 'localhost' ? 'http://localhost:8787' : '';
-    
-    let currentChart = null;
-    let currentLocation = { lat: null, lon: null };
-    let map = null;
-    let mapMarker = null;
-    let currentSpeciesData = null; // Per gestire dati multi-specie
-    let currentForecastData = null; // Per popup dettagli
-
-    // Colori per le specie
-    const SPECIES_COLORS = {
-      'edulis': '#62d5b4',
-      'reticulatus': '#ff9500', 
-      'aereus': '#ff6b6b',
-      'pinophilus': '#8bb7ff',
-      'mixed': '#ffc857'
-    };
-
-    // === DEBUG SYSTEM ===
-    function debugLog(message, data = null) {
-      const timestamp = new Date().toISOString().substr(11, 8);
-      console.log(`[${timestamp}] ${message}`, data || '');
-    }
-
-    // === CHART.JS VERIFICATION ===
-    function checkChartJS() {
-      if (typeof Chart === 'undefined') {
-        console.error('❌ Chart.js non caricato!');
-        document.getElementById('chart-error').style.display = 'block';
-        document.getElementById('chart-error').textContent = 'Chart.js non disponibile. Ricarica la pagina.';
-        return false;
-      }
-      console.log('✅ Chart.js caricato correttamente');
-      return true;
-    }
-
-    // === UTILITIES ===
-    function showNotification(message, type = 'success') {
-      const notification = document.getElementById('notification');
-      if (!notification) return;
-      
-      notification.textContent = message;
-      notification.className = `notification ${type} show`;
-      debugLog(`Notification [${type}]:`, message);
-      
-      setTimeout(() => {
-        notification.classList.remove('show');
-      }, type === 'error' ? 6000 : 4000);
-    }
-
-    function setLoading(isLoading) {
-      document.body.classList.toggle('loading', isLoading);
-    }
-
-    function formatDate(dateStr) {
-      try {
-        if (typeof dateStr !== 'string') return String(dateStr);
-        if (dateStr.includes('+') || dateStr.includes('d')) return dateStr;
-        
-        const date = new Date(dateStr);
-        if (isNaN(date.getTime())) return dateStr;
-        
-        return date.toLocaleDateString('it-IT', { 
-          month: 'short', day: 'numeric' 
-        });
-      } catch (error) {
-        debugLog('Date format error:', error);
-        return String(dateStr);
-      }
-    }
-
-    // === POPUP DETTAGLIO GIORNO ===
-    function showDayDetailPopup(dayIndex, dayData) {
-      // Rimuovi popup esistente se presente
-      const existingPopup = document.querySelector('.popup-overlay');
-      if (existingPopup) {
-        existingPopup.remove();
-      }
-
-      const data = currentSpeciesData;
-      if (!data) return;
-
-      // Calcola dati per il giorno specifico
-      const dayNumber = dayIndex + 1;
-      const today = new Date();
-      const targetDate = new Date(today);
-      targetDate.setDate(today.getDate() + dayIndex);
-      const dateString = targetDate.toLocaleDateString('it-IT', { 
-        weekday: 'long', 
-        day: 'numeric', 
-        month: 'short' 
-      });
-
-      const currentIndex = dayData || 0;
-      const hours = parseInt(document.getElementById('hours').value) || 4;
-      const species = data.species || 'reticulatus';
-      
-      // Calcola raccolto atteso per questo giorno specifico
-      const baseProductivity = {
-        'faggio': 0.8,
-        'quercia': 0.6,
-        'castagno': 0.7,
-        'conifere': 0.5,
-        'misto': 0.6
-      };
-      
-      const habitat = data.habitat_used || 'misto';
-      const productivity = baseProductivity[habitat] || 0.6;
-      
-      const speciesFactor = {
-        'edulis': 1.2,
-        'reticulatus': 1.0,
-        'aereus': 0.9,
-        'pinophilus': 0.8
-      };
-      
-      const expectedHarvest = (currentIndex / 100) * productivity * hours * (speciesFactor[species] || 1.0);
-      const density = Math.round((currentIndex / 100) * 15); // funghi per 100m²
-      
-      // Condizioni meteo per il giorno (se disponibili)
-      const weatherFuture = data.weather_future || {};
-      const dayWeatherKey = Object.keys(weatherFuture)[dayIndex];
-      const dayWeather = dayWeatherKey ? weatherFuture[dayWeatherKey] : null;
-      
-      // Momento migliore per la ricerca
-      const bestTime = currentIndex > 60 ? "06:00-10:00" : 
-                      currentIndex > 30 ? "07:00-11:00" : 
-                      "08:00-12:00";
-      
-      // Crea popup
-      const overlay = document.createElement('div');
-      overlay.className = 'popup-overlay';
-      
-      const popup = document.createElement('div');
-      popup.className = 'day-detail-popup';
-      
-      popup.innerHTML = `
-        <div class="popup-header">
-          <div class="popup-title">📍 ${dateString.charAt(0).toUpperCase() + dateString.slice(1)}</div>
-          <button class="popup-close" onclick="closeDayPopup()">&times;</button>
-        </div>
-        <div class="popup-content">
-          <div class="popup-metric highlight">
-            <div class="popup-metric-label">🍄 Raccolto Atteso (${hours}h)</div>
-            <div class="popup-metric-value">${expectedHarvest.toFixed(1)} kg</div>
-          </div>
-          <div class="popup-metric">
-            <div class="popup-metric-label">📊 Indice Fruttificazione</div>
-            <div class="popup-metric-value">${currentIndex}/100</div>
-          </div>
-          <div class="popup-metric">
-            <div class="popup-metric-label">🌿 Densità Prevista</div>
-            <div class="popup-metric-value">${density} funghi/100m²</div>
-          </div>
-          <div class="popup-metric">
-            <div class="popup-metric-label">📏 Taglia Media</div>
-            <div class="popup-metric-value">${data.size_cm || 11} cm</div>
-          </div>
-          <div class="popup-metric">
-            <div class="popup-metric-label">⏰ Momento Migliore Ricerca</div>
-            <div class="popup-metric-value">${bestTime}</div>
-          </div>
-          <div class="popup-metric">
-            <div class="popup-metric-label">🧬 Specie Dominante</div>
-            <div class="popup-metric-value"><em>B. ${species}</em></div>
-          </div>
-          ${dayWeather ? `
-          <div class="popup-metric">
-            <div class="popup-metric-label">🌡️ Condizioni Meteo</div>
-            <div class="popup-metric-value">T.${dayWeather.temp_mean}°C, ${dayWeather.precipitation_mm}mm</div>
-          </div>
-          ` : ''}
-          <div class="popup-advice">
-            <strong>💡 Strategia Consigliata:</strong><br>
-            ${getSearchStrategy(currentIndex, species, habitat)}
-          </div>
-        </div>
-      `;
-      
-      overlay.appendChild(popup);
-      document.body.appendChild(overlay);
-      
-      // Event listeners
-      overlay.addEventListener('click', (e) => {
-        if (e.target === overlay) closeDayPopup();
-      });
-    }
-
-    function getSearchStrategy(index, species, habitat) {
-      if (index > 70) {
-        return `Condizioni eccellenti! Concentra la ricerca nelle zone più umide e fresche. 
-                Porta contenitori aggiuntivi. ${getSpeciesAdvice(species, habitat)}`;
-      } else if (index > 40) {
-        return `Condizioni buone. Esplora accuratamente i microhabitat favorevoli. 
-                ${getSpeciesAdvice(species, habitat)}`;
-      } else {
-        return `Condizioni difficili. Concentrati sui punti storicamente più produttivi. 
-                Ricerca molto sistematica necessaria. ${getSpeciesAdvice(species, habitat)}`;
-      }
-    }
-
-    function getSpeciesAdvice(species, habitat) {
-      const advice = {
-        'edulis': 'Cerca versanti nord e zone più fresche.',
-        'reticulatus': 'Preferisce zone più soleggiate e calde.',
-        'aereus': 'Associato a querce, zone mediterranee.',
-        'pinophilus': 'Legato a conifere, tollera quote maggiori.'
-      };
-      
-      const habitatAdvice = {
-        'faggio': 'Concentrati sotto le chiome più dense.',
-        'quercia': 'Esplora margini del bosco e radure.',
-        'castagno': 'Versanti sud-est, sottobosco rado.',
-        'conifere': 'Zone con accumulo di aghi.'
-      };
-      
-      return `${advice[species] || ''} ${habitatAdvice[habitat] || ''}`;
-    }
-
-    function closeDayPopup() {
-      const overlay = document.querySelector('.popup-overlay');
-      if (overlay) {
-        overlay.remove();
-      }
-    }
-
-    // === API CALLS ===
-    async function geocodeLocation(query) {
-      try {
-        debugLog('Geocoding:', query);
-        const response = await fetch(`${API_BASE}/api/geocode?q=${encodeURIComponent(query)}`);
-        if (!response.ok) throw new Error('Geocoding fallito');
-        const result = await response.json();
-        debugLog('Geocoding result:', result);
-        return result;
-      } catch (error) {
-        throw new Error(`Errore geocoding: ${error.message}`);
-      }
-    }
-
-    async function getAnalysis(lat, lon, habitat = '', hours = 4) {
-      try {
-        debugLog('Starting multi-species analysis:', { lat, lon, habitat, hours });
-        const params = new URLSearchParams({
-          lat: lat.toString(),
-          lon: lon.toString(),
-          habitat: habitat,
-          hours: hours.toString(),
-          autohabitat: habitat ? '0' : '1'
-        });
-        
-        // Aggiungi parametri esposizione
-        try {
-          const aspectMode = document.getElementById('aspect-mode').value;
-          const aspectOctant = document.getElementById('aspect-octant').value;
-          params.set('autoaspect', aspectMode === 'auto' ? '1' : '0');
-          params.set('aspect', aspectMode === 'manual' ? aspectOctant : (aspectMode === 'multi' ? 'FLAT' : ''));
-          // Lag avanzato
-          try { params.set('advanced_lag', document.getElementById('advanced-lag').checked ? '1' : '0'); } catch (e) {}
-        } catch (e) { 
-          debugLog('Aspect params error:', e); 
-        }
-
-        // NUOVO: Aggiungi parametro ERA5-Land
-        try {
-          const era5Enabled = document.getElementById('era5-toggle').checked;
-          params.set('use_era5', era5Enabled ? '1' : '0');
-        } catch (e) {
-          debugLog('ERA5 toggle error:', e);
-        }
-        
-        const response = await fetch(`${API_BASE}/api/score?${params}`);
-        if (!response.ok) {
-            const errData = await response.json().catch(() => ({ detail: 'Errore generico' }));
-            throw new Error(`HTTP ${response.status}: ${errData.detail || 'Errore sconosciuto'}`);
-        }
-        const result = await response.json();
-        debugLog('Multi-species analysis result:', {
-          hasIndex: !!result.index,
-          hasForecast: Array.isArray(result.forecast),
-          forecastLength: result.forecast?.length,
-          hasFlushEvents: Array.isArray(result.flush_events),
-          eventsCount: result.flush_events?.length,
-          hasSpeciesLag: !!result.species,
-          hasSpeciesCoexistence: !!result.species_probabilities,
-          hasMultipleForecasts: !!result.species_forecasts,
-          hasCumulativeMoisture: !!result.cumulative_moisture_index,
-          weatherQuality: result.weather_quality_score,
-          weatherSources: result.weather_sources,
-          era5Status: result.era5_status
-        });
-        return result;
-      } catch (error) {
-        debugLog('Multi-species analysis error:', error);
-        throw new Error(`Errore analisi sistema multi-specie: ${error.message}`);
-      }
-    }
-
-    async function reportSighting(data) {
-      try {
-        debugLog('Reporting sighting:', data);
-        const response = await fetch(`${API_BASE}/api/report-sighting`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-          body: new URLSearchParams(data)
-        });
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
-        return await response.json();
-      } catch (error) {
-        throw new Error(`Errore segnalazione: ${error.message}`);
-      }
-    }
-
-    async function reportNoFinding(data) {
-      try {
-        debugLog('Reporting no finding:', data);
-        const response = await fetch(`${API_BASE}/api/report-no-findings`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-          body: new URLSearchParams(data)
-        });
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
-        return await response.json();
-      } catch (error) {
-        throw new Error(`Errore report: ${error.message}`);
-      }
-    }
-
-    async function getValidationStats() {
-      try {
-        const response = await fetch(`${API_BASE}/api/validation-stats`);
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
-        return await response.json();
-      } catch (error) {
-        console.warn('Errore stats validazione:', error);
-        return { error: error.message };
-      }
-    }
-
-    // === UI UPDATES ===
-    function updateKPIs(data) {
-      debugLog('Updating KPIs multi-species:', data);
-      
-      try {
-        document.getElementById('k-index').textContent = `${data.index}/100`;
-        
-        const bestWindow = data.best_window;
-        if (bestWindow && bestWindow.mean > 0) {
-          document.getElementById('k-window').textContent = `Giorni ${bestWindow.start + 1}-${bestWindow.end + 1}`;
-        } else {
-          document.getElementById('k-window').textContent = 'Nessuna';
-        }
-
-        const conf = data.confidence_detailed;
-        if (conf) {
-          document.getElementById('conf-met').textContent = conf.meteorological?.toFixed(2) || '—';
-          document.getElementById('conf-eco').textContent = conf.ecological?.toFixed(2) || '—';
-          document.getElementById('conf-hydro').textContent = conf.hydrological?.toFixed(2) || '—';
-          document.getElementById('conf-atmo').textContent = conf.atmospheric?.toFixed(2) || '—';
-          document.getElementById('conf-emp').textContent = conf.empirical?.toFixed(2) || '—';
-          document.getElementById('conf-overall').textContent = conf.overall?.toFixed(2) || '—';
-        }
-
-        document.getElementById('k-harvest').textContent = data.harvest_estimate || '—';
-        document.getElementById('k-harvest-note').textContent = data.harvest_note || '';
-        document.getElementById('k-size').textContent = data.size_cm ? `${data.size_cm} cm` : '—';
-        document.getElementById('k-size-range').textContent = data.size_range_cm ? 
-          `${data.size_range_cm[0]}-${data.size_range_cm[1]} cm` : '—';
-
-        const hasValidations = data.has_local_validations ? 'Sì' : 'No';
-        document.getElementById('k-has-validations').textContent = `validazioni: ${hasValidations}`;
-        
-        // NUOVO: Gestione specie multiple
-        updateSpeciesInfo(data);
-        
-        // NUOVO: Status ERA5-Land dettagliato
-        updateERA5StatusDetailed(data);
-        
-        debugLog('KPIs updated successfully with multi-species system');
-      } catch (error) {
-        debugLog('Error updating KPIs:', error);
-        showNotification('Errore aggiornamento KPI', 'error');
-      }
-    }
-
-    function updateSpeciesInfo(data) {
-      try {
-        const speciesDiv = document.getElementById('species-dominance');
-        if (!speciesDiv) return;
-
-        // Se abbiamo probabilità multiple, mostra coesistenza
-        if (data.species_probabilities && Object.keys(data.species_probabilities).length > 1) {
-          const sorted = Object.entries(data.species_probabilities)
-            .sort((a, b) => b[1] - a[1])
-            .filter(([species, prob]) => prob > 0.1); // Solo specie significative
-
-          if (sorted.length > 1) {
-            const speciesText = sorted.map(([species, prob]) => 
-              `<em>B. ${species}</em> (${Math.round(prob * 100)}%)`
-            ).join(' + ');
-            speciesDiv.innerHTML = `<strong>Coesistenza:</strong> ${speciesText}`;
-            
-            // Mostra legenda specie
-            updateSpeciesLegend(sorted);
-            return;
-          }
-        }
-
-        // Specie singola dominante
-        const species = data.species || 'reticulatus';
-        speciesDiv.innerHTML = `<strong>Specie dominante:</strong> <em>Boletus ${species}</em>`;
-        
-        // Nascondi legenda per specie singola
-        document.getElementById('species-legend').style.display = 'none';
-        
-      } catch (error) {
-        debugLog('Error updating species info:', error);
-      }
-    }
-
-    function updateSpeciesLegend(speciesProbabilities) {
-      try {
-        const legendDiv = document.getElementById('species-legend');
-        if (!legendDiv || !speciesProbabilities || speciesProbabilities.length <= 1) {
-          legendDiv.style.display = 'none';
-          return;
-        }
-
-        let html = '';
-        speciesProbabilities.forEach(([species, probability]) => {
-          const color = SPECIES_COLORS[species] || SPECIES_COLORS.mixed;
-          const percentage = Math.round(probability * 100);
-          
-          html += `
-            <div class="species-legend-item">
-              <div class="species-color-dot" style="background-color: ${color}"></div>
-              <span><em>B. ${species}</em></span>
-              <span class="species-probability">${percentage}%</span>
-            </div>
-          `;
-        });
-
-        legendDiv.innerHTML = html;
-        legendDiv.style.display = 'flex';
-        
-        debugLog('Species legend updated:', speciesProbabilities);
-      } catch (error) {
-        debugLog('Error updating species legend:', error);
-      }
-    }
-
-    function updateChart(forecast, data = null) {
-      debugLog('Updating chart without red zones:', forecast);
-      
-      if (!checkChartJS()) {
-        return;
-      }
-      
-      try {
-        // Verifica che forecast sia un array valido
-        if (!Array.isArray(forecast) || forecast.length === 0) {
-          debugLog('❌ Forecast non valido:', forecast);
-          document.getElementById('chart-error').style.display = 'block';
-          document.getElementById('chart-error').textContent = 'Dati previsione non disponibili dal sistema multi-specie';
-          return;
-        }
-        
-        const ctx = document.getElementById('chart');
-        if (!ctx) {
-          debugLog('❌ Canvas chart non trovato');
-          return;
-        }
-        
-        // Salva dati per popup
-        currentForecastData = forecast;
-        
-        // Distruggi grafico precedente
-        if (currentChart) {
-          currentChart.destroy();
-          currentChart = null;
-        }
-        
-        const labels = forecast.map((_, i) => `Giorno ${i + 1}`);
-        const datasets = [];
-        
-        // GESTIONE MULTI-SPECIE (NO ZONE ROSSE)
-        if (data && data.species_forecasts && Object.keys(data.species_forecasts).length > 1) {
-          // CURVE MULTIPLE SOVRAPPOSTE
-          const speciesProbabilities = data.species_probabilities || {};
-          
-          Object.entries(data.species_forecasts).forEach(([species, speciesForecast]) => {
-            const probability = speciesProbabilities[species] || 0;
-            if (probability < 0.1) return; // Skip specie con probabilità troppo bassa
-            
-            const color = SPECIES_COLORS[species] || SPECIES_COLORS.mixed;
-            const alpha = 0.4 + (probability * 0.6); // Trasparenza basata su probabilità
-            
-            datasets.push({
-              label: `🍄 B. ${species} (${Math.round(probability * 100)}%)`,
-              data: speciesForecast,
-              borderColor: color,
-              backgroundColor: color + Math.floor(alpha * 255).toString(16).padStart(2, '0'),
-              borderWidth: 3,
-              fill: true,
-              tension: 0.2,
-              pointBackgroundColor: color,
-              pointBorderColor: '#ffffff',
-              pointBorderWidth: 2,
-              pointRadius: 6,
-              pointHoverRadius: 10
-            });
-          });
-          
-          // Mostra spiegazione curve multiple
-          const lagExplanation = document.getElementById('lag-explanation');
-          if (lagExplanation) {
-            lagExplanation.innerHTML = `💡 <strong>Curve Multi-Specie:</strong> Ogni curva rappresenta il raccolto di funghi previsto per specie. Clicca sui punti per dettagli.`;
-            lagExplanation.style.display = 'block';
-          }
-          
-        } else {
-          // CURVA SINGOLA (NO ZONE ROSSE)
-          const species = data?.species || 'reticulatus';
-          const color = SPECIES_COLORS[species] || SPECIES_COLORS.mixed;
-          
-          datasets.push({
-            label: `🍄 Raccolto Previsto`,
-            data: forecast,
-            borderColor: color,
-            backgroundColor: color + '26',
-            borderWidth: 4,
-            fill: true,
-            tension: 0.2,
-            pointBackgroundColor: color,
-            pointBorderColor: '#ffffff',
-            pointBorderWidth: 2,
-            pointRadius: 6,
-            pointHoverRadius: 10
-          });
-          
-          // Spiegazione curva singola
-          const lagExplanation = document.getElementById('lag-explanation');
-          if (lagExplanation) {
-            lagExplanation.innerHTML = `💡 <strong>Curva Raccolto:</strong> L'altezza indica la quantità di funghi prevista. Clicca sui punti per dettagli.`;
-            lagExplanation.style.display = 'block';
-          }
-        }
-        
-        // CHART.JS v3.9.1 SYNTAX CON INTERATTIVITÀ
-        currentChart = new Chart(ctx, {
-          type: 'line',
-          data: {
-            labels: labels,
-            datasets: datasets
-          },
-          options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            layout: {
-              padding: {
-                left: 15,
-                right: 15,
-                top: 15,
-                bottom: 15
-              }
-            },
-            animation: {
-              duration: 800,
-              easing: 'easeInOutQuart'
-            },
-            plugins: { 
-              legend: { 
-                display: true,
-                position: 'top',
-                labels: {
-                  color: '#8aa0b6',
-                  font: { size: 12 }
-                }
-              },
-              tooltip: {
-                callbacks: {
-                  afterLabel: function(context) {
-                    return '📊 Clicca per dettagli raccolto';
-                  }
-                }
-              }
-            },
-            scales: {
-              y: { 
-                beginAtZero: true, 
-                max: 100,
-                min: 0,
-                grid: { 
-                  color: 'rgba(255,255,255,0.08)',
-                  drawBorder: false
-                }, 
-                ticks: { 
-                  color: '#8aa0b6', 
-                  font: { size: 12 },
-                  maxTicksLimit: 8
-                }
-              },
-              x: { 
-                grid: { 
-                  color: 'rgba(255,255,255,0.08)',
-                  drawBorder: false
-                }, 
-                ticks: { 
-                  color: '#8aa0b6', 
-                  font: { size: 12 },
-                  maxRotation: 0
-                }
-              }
-            },
-            elements: { 
-              point: { hoverRadius: 10 },
-              line: { borderJoinStyle: 'round' }
-            },
-            interaction: {
-              intersect: false,
-              mode: 'index'
-            },
-            // EVENTO CLICK per popup
-            onClick: (event, elements) => {
-              if (elements.length > 0) {
-                const elementIndex = elements[0].index;
-                const dayData = currentForecastData[elementIndex];
-                showDayDetailPopup(elementIndex, dayData);
-              }
-            }
-          }
-        });
-        
-        // Nascondi messaggio errore
-        document.getElementById('chart-error').style.display = 'none';
-        debugLog('✅ Chart created successfully without red zones with', forecast.length, 'data points');
-        
-      } catch (error) {
-        debugLog('❌ Error creating chart:', error);
-        document.getElementById('chart-error').style.display = 'block';
-        document.getElementById('chart-error<!DOCTYPE html>
-<html lang="it">
-<head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>BoletusLab® – Sistema Previsionale Micologico</title>
-  
-  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
-  
-  <style>
-    :root{
-      --bg:#0b0d10; --panel:#12161b; --muted:#8aa0b6; --text:#e6eef6;
-      --accent:#62d5b4; --accent-2:#8bb7ff; --danger:#ff6b6b; --warn:#ffc857; --ok:#66e28a;
-      --shadow:0 8px 24px rgba(0,0,0,.35);
-      --radius:14px;
-      /* Colori per le specie */
-      --edulis:#62d5b4; --reticulatus:#ff9500; --aereus:#ff6b6b; --pinophilus:#8bb7ff;
-    }
-    *{box-sizing:border-box}
-    html,body{margin:0;background:linear-gradient(180deg,#0a0c0f 0%,#0d1218 100%);color:var(--text);font:16px/1.5 system-ui,Segoe UI,Roboto,Helvetica,Arial,sans-serif}
-    a{color:var(--accent-2)}
-    .wrap{max-width:1200px;margin:32px auto;padding:0 16px}
-    header{display:flex;gap:16px;align-items:center;margin-bottom:18px;flex-wrap:wrap}
-    header h1{font-size:22px;margin:0}
-    header .badge{padding:4px 10px;border-radius:999px;background:linear-gradient(90deg,#1b2230,#17202b);color:#cfe6ff;border:1px solid #283343}
-    .panel{background:linear-gradient(180deg,#12161b,#0f141a);border:1px solid #1e2937;border-radius:var(--radius);box-shadow:var(--shadow); margin-bottom: 20px;}
-    .panel h3{margin:0 0 8px 0;font-size:18px}
-    .controls{display:grid;grid-template-columns:1.1fr .8fr .8fr .8fr .9fr .8fr auto;gap:10px;align-items:end;padding:16px}
-    label{font-size:12px;color:var(--muted);display:block;margin-bottom:6px}
-    input[type=text],input[type=number],select{
-      width:100%;padding:10px 12px;border-radius:10px;border:1px solid #243142;background:#0d141b;color:var(--text)
-    }
-    .btn{padding:10px 14px;border-radius:12px;border:1px solid #2a384b;background:linear-gradient(180deg,#1b2430,#151c26);color:#e9f5ff;font-weight:600;cursor:pointer;transition:all 0.2s ease}
-    .btn:hover{transform:translateY(-1px);box-shadow:0 6px 16px rgba(0,0,0,.28)}
-    .btn.success{background:linear-gradient(180deg,#28a745,#1e7e34);border-color:#1e7e34}
-    .btn.secondary{background:linear-gradient(180deg,#6c757d,#545b62);border-color:#545b62}
-    .grid{display:grid;gap:14px;padding:16px}
-    .grid.g2{grid-template-columns:1fr 1fr}
-    .grid.g3{grid-template-columns:1.1fr .9fr .9fr}
-    .grid.g4{grid-template-columns:repeat(4,1fr)}
-    .metric{display:flex;gap:12px;align-items:center}
-    .metric .k{font-size:12px;color:var(--muted)}
-    .metric .v{font-size:22px;font-weight:700}
-    .chip{display:inline-flex;gap:8px;align-items:center;padding:6px 10px;border-radius:999px;border:1px solid #273244;background:#0f1520;color:#cfe6ff;font-size:12px}
-    .chip.ok{border-color:#224733;background:#0f1a14;color:#b9f3cf}
-    .chip.warn{border-color:#4a3b1a;background:#1a160f;color:#ffe0a3}
-    .chip.bad{border-color:#4a1a1a;background:#1a0f10;color:#ffb9b9}
-    .section{padding:16px}
-    .hr{height:1px;background:linear-gradient(90deg,transparent,#253244,transparent);margin:12px 0}
-    #chart{
-      width:100%;
-      height:350px;
-      max-width:100%;
-      max-height:350px;
-      border-radius:12px;
-      background:linear-gradient(180deg,#0c1015,#0b0f14);
-      border:1px solid #1e2937;
-      overflow:hidden;
-      display:block;
-      cursor:pointer;
-    }
-    table{width:100%;border-collapse:collapse;border:1px solid #232f40;border-radius:12px;overflow:hidden}
-    th,td{padding:8px 10px;border-bottom:1px solid #232f40;font-size:13px}
-    th{background:#131922;color:#b7c9dd;text-align:left}
-    tr:hover td{background:#0f141b}
-    .events ul{margin:6px 0 0 18px}
-    .events li{margin:2px 0}
-    details{background:#0e141b;border:1px solid #203045;border-radius:12px;padding:10px}
-    summary{cursor:pointer;font-weight:600}
-    .muted{color:#93a7bd}
-    .mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
-    footer{margin:24px 0 40px;color:#8aa0b6;font-size:12px;text-align:center}
-    .confidence-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:8px;margin-top:8px}
-    .confidence-item{text-align:center;padding:8px;background:#0a0f14;border-radius:8px;border:1px solid #1e2937}
-    .confidence-label{font-size:10px;color:var(--muted);margin-bottom:4px}
-    .confidence-value{font-size:14px;font-weight:600}
-    
-    #map {
-      height: 350px;
-      width: 100%;
-      max-width: 100%;
-      border-radius: var(--radius);
-      border: 1px solid #1e2937;
-      box-shadow: var(--shadow);
-      cursor: pointer;
-      overflow: hidden;
-    }
-    
-    .crowdsource{
-      background:linear-gradient(135deg,#1a2332,#0f1419);
-      border:2px solid #2a4a3d;
-      margin-top:20px;
-      padding:20px!important;
-    }
-    .crowdsource h3{color:#66e28a;margin-bottom:16px;font-size:20px}
-    .crowdsource h4{color:var(--accent);margin:12px 0 8px 0;font-size:16px}
-    .input-group{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:12px}
-    .input-group input, .input-group select{flex:1;min-width:120px}
-    .input-group input[type="text"]{min-width:250px}
-    
-    .stats-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:12px}
-    .stat-item{text-align:center;padding:12px;background:#0a0f14;border-radius:10px;border:1px solid #1e2937}
-    .stat-value{font-size:20px;font-weight:700;color:var(--accent)}
-    .stat-label{font-size:11px;color:var(--muted);margin-top:4px}
-    .notification{position:fixed;top:20px;right:20px;padding:12px 16px;border-radius:8px;color:white;font-weight:600;z-index:1000;transform:translateX(400px);transition:transform 0.3s ease}
-    .notification.show{transform:translateX(0)}
-    .notification.success{background:#28a745}
-    .notification.error{background:#dc3545}
-    .notification.warn{background:#ffc107;color:#000}
-    .version-badge{background:linear-gradient(45deg,#667eea,#764ba2);padding:3px 8px;border-radius:12px;font-size:11px;font-weight:600}
-    
-    .field-analysis{
-      background:#0a0f14;
-      border-radius:12px;
-      padding:16px;
-      margin-top:12px;
-      line-height:1.7;
-    }
-    .field-analysis h4{
-      color:var(--accent);
-      margin:20px 0 12px 0;
-      font-size:16px;
-      border-bottom:1px solid #1e2937;
-      padding-bottom:8px;
-    }
-    .field-analysis h4:first-child{margin-top:0}
-    .field-analysis p{margin:8px 0;color:#d8e3f0}
-    .field-analysis em{color:var(--muted);font-style:italic}
-    .field-analysis strong{color:#fff;font-weight:600}
-    .field-analysis ul{margin:8px 0 0 20px;color:#d8e3f0}
-    .field-analysis li{margin:4px 0}
-    .return-advice{
-      background:linear-gradient(135deg,#1a2a3e,#0f1925);
-      border-left:4px solid var(--accent);
-      padding:12px;
-      border-radius:8px;
-      margin:16px 0!important;
-    }
-    .loading{opacity:0.6;pointer-events:none}
-    .hidden{display:none}
-    
-    .error-debug {
-      background: #2d1b1b;
-      border: 1px solid #ff6b6b;
-      color: #ffb9b9;
-      padding: 12px;
-      border-radius: 8px;
-      margin: 8px 0;
-      font-family: monospace;
-      font-size: 12px;
-    }
-    
-    .lag-explanation {
-      background: #0e1419;
-      border: 1px solid #62d5b4;
-      border-radius: 8px;
-      padding: 10px;
-      margin: 8px 0;
-      font-size: 11px;
-      color: #b9f3cf;
-    }
-    
-    .scientific-badge {
-      background: linear-gradient(45deg, #ff6b6b, #4ecdc4);
-      color: white;
-      padding: 3px 8px;
-      border-radius: 12px;
-      font-size: 11px;
-      font-weight: 600;
-    }
-
-    /* Toggle Switch per ERA5-Land */
-    .toggle-switch {
-      position: relative;
-      display: inline-block;
-      width: 60px;
-      height: 34px;
-    }
-    
-    .toggle-switch input {
-      opacity: 0;
-      width: 0;
-      height: 0;
-    }
-    
-    .slider {
-      position: absolute;
-      cursor: pointer;
-      top: 0;
-      left: 0;
-      right: 0;
-      bottom: 0;
-      background-color: #2196F3;
-      transition: .4s;
-      border-radius: 34px;
-    }
-    
-    .slider:before {
-      position: absolute;
-      content: "";
-      height: 26px;
-      width: 26px;
-      left: 4px;
-      bottom: 4px;
-      background-color: white;
-      transition: .4s;
-      border-radius: 50%;
-    }
-    
-    input:checked + .slider {
-      background-color: #2196F3;
-    }
-    
-    input:focus + .slider {
-      box-shadow: 0 0 1px #2196F3;
-    }
-    
-    input:checked + .slider:before {
-      transform: translateX(26px);
-    }
-
-    /* Multi-species legend */
-    .species-legend {
-      display: flex;
-      gap: 12px;
-      flex-wrap: wrap;
-      margin: 8px 0;
-      padding: 12px;
-      background: #0a0f14;
-      border-radius: 8px;
-      border: 1px solid #1e2937;
-    }
-    
-    .species-legend-item {
-      display: flex;
-      align-items: center;
-      gap: 6px;
-      padding: 4px 8px;
-      background: #12161b;
-      border-radius: 6px;
-      font-size: 12px;
-    }
-    
-    .species-color-dot {
-      width: 12px;
-      height: 12px;
-      border-radius: 50%;
-      border: 2px solid white;
-    }
-    
-    .species-probability {
-      font-weight: 600;
-      color: var(--accent);
-    }
-
-    /* Weather source controls */
-    .weather-controls {
-      background: #0a0f14;
-      border: 1px solid #1e2937;
-      border-radius: 8px;
-      padding: 12px;
-      margin-top: 8px;
-    }
-    
-    .weather-controls h5 {
-      margin: 0 0 8px 0;
-      color: var(--accent);
-      font-size: 14px;
-    }
-    
-    .weather-toggle-group {
-      display: flex;
-      align-items: center;
-      gap: 12px;
-      margin: 8px 0;
-    }
-    
-    .weather-toggle-label {
-      font-size: 12px;
-      color: var(--muted);
-      display: flex;
-      align-items: center;
-      gap: 8px;
-    }
-
-    /* Popup dettaglio giorno */
-    .day-detail-popup {
-      position: fixed;
-      top: 50%;
-      left: 50%;
-      transform: translate(-50%, -50%);
-      background: linear-gradient(180deg, #12161b, #0f141a);
-      border: 2px solid #1e2937;
-      border-radius: 12px;
-      padding: 20px;
-      min-width: 350px;
-      max-width: 500px;
-      box-shadow: 0 12px 36px rgba(0,0,0,0.5);
-      z-index: 10000;
-      color: var(--text);
-    }
-
-    .popup-overlay {
-      position: fixed;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
-      background: rgba(0,0,0,0.7);
-      z-index: 9999;
-    }
-
-    .popup-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      margin-bottom: 16px;
-      padding-bottom: 12px;
-      border-bottom: 1px solid #1e2937;
-    }
-
-    .popup-title {
-      font-size: 18px;
-      font-weight: 600;
-      color: var(--accent);
-    }
-
-    .popup-close {
-      background: none;
-      border: none;
-      color: var(--muted);
-      font-size: 24px;
-      cursor: pointer;
-      padding: 4px;
-    }
-
-    .popup-close:hover {
-      color: var(--text);
-    }
-
-    .popup-content {
-      display: grid;
-      gap: 12px;
-    }
-
-    .popup-metric {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      padding: 8px 12px;
-      background: #0a0f14;
-      border-radius: 8px;
-      border: 1px solid #1e2937;
-    }
-
-    .popup-metric-label {
-      font-size: 14px;
-      color: var(--muted);
-      display: flex;
-      align-items: center;
-      gap: 6px;
-    }
-
-    .popup-metric-value {
-      font-size: 16px;
-      font-weight: 600;
-      color: var(--text);
-    }
-
-    .popup-metric.highlight .popup-metric-value {
-      color: var(--accent);
-      font-size: 18px;
-    }
-
-    .popup-advice {
-      background: linear-gradient(135deg, #1a2a3e, #0f1925);
-      border-left: 4px solid var(--accent);
-      padding: 12px;
-      border-radius: 8px;
-      margin-top: 8px;
-      font-size: 13px;
-      line-height: 1.4;
-    }
-    
-    @media (max-width: 768px) {
-      .controls{grid-template-columns:1fr;gap:8px}
-      .grid.g3{grid-template-columns:1fr}
-      .grid.g4{grid-template-columns:1fr 1fr}
-      .input-group{flex-direction:column;align-items:stretch}
-      .crowdsource .grid.g2{grid-template-columns:1fr}
-      #map{height:280px}
-      #chart{height:280px!important;max-height:280px!important}
-      .panel{overflow:hidden}
-      .species-legend{flex-direction:column;gap:8px}
-      .day-detail-popup{
-        min-width: 300px;
-        max-width: 90vw;
-        margin: 20px;
-      }
-    }
-  </style>
-</head>
-<body>
-  <div class="wrap">
-    <header>
-      <h1>🍄 BoletusLab® – Sistema Previsionale Micologico</h1>
-      <span class="badge version-badge">v2.5.7</span>
-      <span class="badge scientific-badge">Algoritmi Scientifici Boletus spp.</span>
-      <span class="badge">Previsione Fruttificazione</span>
-    </header>
-
-    <div class="panel">
-      <div class="controls">
-        <div>
-          <label>Località (geocoding)</label>
-          <input id="q" type="text" placeholder="Es. Abbadia San Salvatore" />
-        </div>
-        <div>
-          <label>Latitudine</label>
-          <input id="lat" type="number" step="0.0001" placeholder="Copia da Google Maps" />
-        </div>
-        <div>
-          <label>Longitudine</label>
-          <input id="lon" type="number" step="0.0001" placeholder="o clicca sulla mappa" />
-        </div>
-        <div>
-          <label>Habitat</label>
-          <select id="habitat">
-            <option value="">(auto da OSM)</option>
-            <option>castagno</option><option>faggio</option><option>quercia</option>
-            <option>conifere</option><option>misto</option><option>altro</option>
-          </select>
-          <div style="margin-top:8px;">
-            <label style="display:flex;align-items:center;gap:6px;font-size:11px;">
-              <input type="checkbox" id="advanced-lag" style="width:auto;">
-              🧬 Lag biologico avanzato (includi effetto esposizione)
-            </label>
-          </div>
-        </div>
-        <div>
-          <label>Esposizione</label>
-          <select id="aspect-mode">
-            <option value="auto">Automatico DEM</option>
-            <option value="manual">Manuale</option>
-            <option value="multi">Pianeggiante / Multi-esposizione</option>
-          </select>
-          <select id="aspect-octant" style="display:none;margin-top:4px;">
-            <option value="">Seleziona...</option>
-            <option value="N">Nord (N)</option>
-            <option value="NE">Nord-Est (NE)</option>
-            <option value="E">Est (E)</option>
-            <option value="SE">Sud-Est (SE)</option>
-            <option value="S">Sud (S)</option>
-            <option value="SW">Sud-Ovest (SW)</option>
-            <option value="W">Ovest (W)</option>
-            <option value="NW">Nord-Ovest (NW)</option>
-          </select>
-        </div>
-        <div>
-          <label>Ore sul campo</label>
-          <select id="hours">
-            <option>2</option><option selected>4</option><option>6</option><option>8</option>
-          </select>
-        </div>
-        <div style="display:flex;gap:8px;">
-          <button id="btnGeo" class="btn" title="Cerca">🔍 Cerca</button>
-        </div>
-      </div>
-      
-      <!-- Controlli meteo avanzati -->
-      <div class="weather-controls">
-        <h5>🌦️ Fonti Dati Meteorologici</h5>
-        <div class="weather-toggle-group">
-          <label class="weather-toggle-label">
-            <span class="toggle-switch">
-              <input type="checkbox" id="era5-toggle">
-              <span class="slider"></span>
-            </span>
-            🛰️ ERA5-Land (umidità suolo satellitare)
-          </label>
-          <span id="era5-status" class="chip">Disattivato</span>
-        </div>
-        <div style="font-size: 11px; color: var(--muted); margin-top: 8px;">
-          <strong>Primario:</strong> Open-Meteo (20d storici + 10d forecast) • 
-          <strong>Backup:</strong> Visual Crossing • 
-          <strong>Satellitare:</strong> ERA5-Land (opzionale)
-        </div>
-      </div>
-    </div>
-
-    <div class="panel">
-        <div id="map"></div>
-    </div>
-
-    <div class="grid g3">
-      <div class="panel section">
-        <h3>🎯 Indice Oggi</h3>
-        <div class="metric"><div class="k">Forza flush</div><div id="k-index" class="v">—</div></div>
-        <div class="hr"></div>
-        <div class="metric"><div class="k">Finestra migliore</div><div id="k-window" class="v">—</div></div>
-        <div style="margin-top:8px;">
-          <span id="k-model-version" class="chip">v2.5.7</span>
-          <span id="k-has-validations" class="chip">validazioni: —</span>
-        </div>
-        <div id="species-info" style="margin-top:12px;">
-          <div id="species-dominance" class="muted" style="font-size:12px;">Specie: —</div>
-        </div>
-      </div>
-      
-      <div class="panel section">
-        <h3>🔬 Affidabilità 5D</h3>
-        <div class="confidence-grid">
-          <div class="confidence-item">
-            <div class="confidence-label">Meteo</div>
-            <div id="conf-met" class="confidence-value">—</div>
-          </div>
-          <div class="confidence-item">
-            <div class="confidence-label">Eco</div>
-            <div id="conf-eco" class="confidence-value">—</div>
-          </div>
-          <div class="confidence-item">
-            <div class="confidence-label">Hydro</div>
-            <div id="conf-hydro" class="confidence-value">—</div>
-          </div>
-          <div class="confidence-item">
-            <div class="confidence-label">Atmo</div>
-            <div id="conf-atmo" class="confidence-value">—</div>
-          </div>
-          <div class="confidence-item">
-            <div class="confidence-label">Emp</div>
-            <div id="conf-emp" class="confidence-value">—</div>
-          </div>
-        </div>
-        <div class="hr"></div>
-        <div class="metric">
-          <div class="k">Overall</div>
-          <div id="conf-overall" class="v" style="color:var(--accent)">—</div>
-        </div>
-      </div>
-      
-      <div class="panel section">
-        <h3>🍄 Dimensioni & Raccolto</h3>
-        <div class="metric"><div class="k">Taglia media</div><div id="k-size" class="v">—</div></div>
-        <div class="metric"><div class="k">Range</div><div id="k-size-range" class="v">—</div></div>
-        <div class="hr"></div>
-        <div class="metric"><div class="k">Raccolto atteso</div><div id="k-harvest" class="v" style="font-size:18px">—</div></div>
-        <div class="muted" id="k-harvest-note" style="font-size:11px;margin-top:4px"></div>
-      </div>
-    </div>
-
-    <div class="panel section">
-      <h3>📈 Previsione Prossimi 10 Giorni (Clicca sui Punti per Dettagli Raccolto)</h3>
-      <div style="margin-bottom:8px;color:var(--muted);font-size:12px;">
-        ✨ <strong>BoletusLab v2.5.7:</strong> Lag specie-specifico • Umidità cumulativa • Esposizione corretta • Algoritmi scientifici Boletus spp.
-      </div>
-      
-      <!-- Legenda specie -->
-      <div id="species-legend" class="species-legend" style="display:none;">
-        <!-- Sarà popolata dinamicamente -->
-      </div>
-      
-      <div class="lag-explanation" id="lag-explanation" style="display:none;">
-        💡 <strong>Fruttificazione Step-Function:</strong> Basato su letteratura scientifica - i funghi appaiono improvvisamente "tutto o niente" dopo lag biologico specie-specifico.
-      </div>
-      <div style="width:100%;max-width:100%;overflow:hidden;position:relative;">
-        <canvas id="chart" style="width:100%!important;height:350px!important;max-width:100%!important;"></canvas>
-      </div>
-      <div id="chart-error" style="display:none;" class="error-debug">
-        Errore nel caricamento del grafico. Verifica la console per dettagli.
-      </div>
-    </div>
-
-    <div class="panel section">
-      <h3>🧭 Analisi Biologica Scientifica Dettagliata v2.5.7</h3>
-      <div id="field-analysis" class="field-analysis">
-        <p class="muted">Esegui un'analisi per vedere i dettagli scientifici con algoritmi BoletusLab.</p>
-      </div>
-    </div>
-
-    <div class="panel section">
-      <h3>🌧️ Dati Meteorologici Completi e Eventi Piovosi</h3>
-      <div class="grid g2">
-        <div>
-          <h4>📊 Ultimi 20 giorni (Pioggia + Temperature)</h4>
-          <div id="rain-past-table">
-            <p class="muted">In attesa di analisi...</p>
-          </div>
-        </div>
-        <div>
-          <h4>🔮 Prossimi 10 giorni (Pioggia + Temperature)</h4>
-          <div id="rain-future-table">
-            <p class="muted">In attesa di analisi...</p>
-          </div>
-        </div>
-      </div>
-      <div style="margin-top:16px;">
-        <h4>💧 Eventi di Flush con Lag Specie-Specifico</h4>
-        <div id="flush-events" class="events">
-          <p class="muted">In attesa di analisi...</p>
-        </div>
-        <div id="cumulative-moisture-info" style="margin-top:12px;">
-          <h4>🌊 Sistema Meteorologico Ibrido + ERA5-Land</h4>
-          <div id="cumulative-moisture-value" class="muted">In attesa di calcolo qualità weather...</div>
-        </div>
-      </div>
-    </div>
-
-    <div class="panel section crowdsource">
-      <h3>🧬 Contribuisci alla Ricerca Scientifica</h3>
-      <p style="margin-bottom:20px;color:#cfe6ff;">Aiuta a perfezionare gli algoritmi BoletusLab condividendo le tue osservazioni. I dati alimentano l'algoritmo di machine learning per migliorare la previsione della fruttificazione fungina multi-specie.</p>
-      
-      <div class="grid g2">
-        <div>
-          <h4>✅ Segnala Ritrovamento</h4>
-          <div class="input-group">
-            <select id="sighting-species">
-              <option>aereus</option><option>reticulatus</option><option>edulis</option><option>pinophilus</option><option>altro</option>
-            </select>
-            <input type="number" id="sighting-quantity" placeholder="Quantità" min="1" max="50" value="1">
-            <input type="number" id="sighting-size" placeholder="Taglia media (cm)" min="2" max="20" step="0.5">
-          </div>
-          <div class="input-group">
-            <input type="text" id="sighting-habitat" placeholder="Habitat osservato (es. faggio misto)">
-            <select id="sighting-confidence">
-              <option value="0.9">Molto sicuro</option><option value="0.8" selected>Sicuro</option><option value="0.6">Abbastanza sicuro</option><option
