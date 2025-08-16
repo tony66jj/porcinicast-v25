@@ -806,7 +806,7 @@ async def fetch_visual_crossing_historical(lat: float, lon: float, days_back: in
         return []
     
     try:
-        end_date = datetime.now() - timedelta(days=7)  # Fino a 7 giorni fa
+        end_date = datetime.now()  # fino a oggi
         start_date = end_date - timedelta(days=days_back-1)  # 8 giorni indietro da lì
         
         start_str = start_date.strftime("%Y-%m-%d")
@@ -884,93 +884,103 @@ async def fetch_open_meteo_recent_and_forecast(lat: float, lon: float, past: int
     
     return {"data": results, "original": data}
 
-async def fetch_hybrid_weather_data(lat: float, lon: float, total_past_days: int = 15, future_days: int = 10) -> Dict[str, Any]:
+
+async def fetch_hybrid_weather_data(lat: float, lon: float, total_past_days: int = 20, future_days: int = 10) -> Dict[str, Any]:
     """
-    SISTEMA IBRIDO: 
-    - Visual Crossing: giorni 8-15 (8 giorni più vecchi)
-    - Open-Meteo: giorni 1-7 (recenti) + forecast 10 giorni
+    SISTEMA DATI: Open‑Meteo come primaria per storico (past_days=total_past_days) + forecast.
+    Fallback: Visual Crossing solo se Open‑Meteo fallisce (per l'intera finestra storica).
     """
     try:
-        logger.info(f"Fetching hybrid weather data: VC(8-15d) + OM(1-7d+forecast)")
-        
-        # Fetch parallelo dalle due fonti
-        tasks = [
-            fetch_visual_crossing_historical(lat, lon, days_back=8),  # Giorni 8-15
-            fetch_open_meteo_recent_and_forecast(lat, lon, past=7, future=future_days)  # Giorni 1-7 + forecast
-        ]
-        
-        vc_data, om_result = await asyncio.gather(*tasks, return_exceptions=True)
-        
-        # Gestisci errori
-        if isinstance(vc_data, Exception):
-            logger.warning(f"Visual Crossing failed: {vc_data}")
-            vc_data = []
-        
-        if isinstance(om_result, Exception):
-            logger.error(f"Open-Meteo failed: {om_result}")
-            raise HTTPException(500, "Errore critico: Open-Meteo non disponibile")
-        
-        om_data = om_result["data"] if "data" in om_result else []
-        
-        # Separa dati storici e forecast di Open-Meteo
-        om_past = om_data[:7]  # Primi 7 = passato
-        om_forecast = om_data[7:]  # Resto = forecast
-        
-        # Combina: VC (8-15 giorni fa) + OM (1-7 giorni fa) + OM (forecast)
-        combined_past = []
-        
-        # Aggiungi Visual Crossing (giorni più vecchi) - ordine cronologico
-        if vc_data:
-            combined_past.extend(sorted(vc_data, key=lambda x: x["date"]))
-        
-        # Aggiungi Open-Meteo recente
-        combined_past.extend(om_past)
-        
-        # Costruisci serie temporali per compatibilità backend
-        combined_past_sorted = sorted(combined_past, key=lambda x: x["date"])
-        
-        time_series = [item["date"] for item in combined_past_sorted] + [item["date"] for item in om_forecast]
-        P_series = [item["precipitation_mm"] for item in combined_past_sorted] + [item["precipitation_mm"] for item in om_forecast]
-        Tmin_series = [item["temp_min"] for item in combined_past_sorted] + [item["temp_min"] for item in om_forecast]
-        Tmax_series = [item["temp_max"] for item in combined_past_sorted] + [item["temp_max"] for item in om_forecast]
-        Tmean_series = [item["temp_mean"] for item in combined_past_sorted] + [item["temp_mean"] for item in om_forecast]
-        RH_series = [item["humidity"] for item in combined_past_sorted] + [item["humidity"] for item in om_forecast]
-        ET0_series = [item.get("et0", 2.0) for item in combined_past_sorted] + [item.get("et0", 2.0) for item in om_forecast]
-        
-        # Data quality assessment
-        vc_days = len(vc_data)
-        om_past_days = len(om_past)
-        total_past_received = vc_days + om_past_days
-        completeness = total_past_received / total_past_days
-        
-        logger.info(f"Hybrid weather data assembled: VC={vc_days}d, OM_past={om_past_days}d, OM_forecast={len(om_forecast)}d, completeness={completeness:.2f}")
-        
+        logger.info(f"Fetching weather data: Open‑Meteo past={total_past_days}d + forecast={future_days}d (primary)")
+
+        om_result = await fetch_open_meteo_recent_and_forecast(lat, lon, past=total_past_days, future=future_days)
+        om_data_list = om_result.get("data", [])
+        if not om_data_list or len(om_data_list) < total_past_days:
+            raise RuntimeError(f"Open‑Meteo insufficient data: {len(om_data_list)} rows")
+
+        # split past vs forecast by index
+        time_all = [d["date"] for d in om_data_list]
+        P_all = [float(d.get("precipitation_mm", 0.0)) for d in om_data_list]
+        Tmin_all = [float(d.get("temp_min", 0.0)) for d in om_data_list]
+        Tmax_all = [float(d.get("temp_max", 0.0)) for d in om_data_list]
+        Tmean_all = [float(d.get("temp_mean", (d.get("temp_min",0.0)+d.get("temp_max",0.0))/2.0)) for d in om_data_list]
+        RH_all = [float(d.get("humidity", 65.0)) for d in om_data_list]
+        ET0_all = [float(d.get("et0", 2.0)) for d in om_data_list]
+
+        # Build daily payload arrays in the same format as before
+        daily_payload = {
+            "time": time_all,
+            "precipitation_sum": P_all,
+            "temperature_2m_min": Tmin_all,
+            "temperature_2m_max": Tmax_all,
+            "temperature_2m_mean": Tmean_all,
+            "relative_humidity_2m_mean": RH_all,
+            "et0_fao_evapotranspiration": ET0_all
+        }
+
+        total_past_received = min(total_past_days, len(P_all))
+        completeness = min(1.0, float(len(P_all)) / float(total_past_days + future_days))
+
         return {
-            "daily": {
-                "time": time_series,
-                "precipitation_sum": P_series,
-                "temperature_2m_min": Tmin_series,
-                "temperature_2m_max": Tmax_series,
-                "temperature_2m_mean": Tmean_series,
-                "relative_humidity_2m_mean": RH_series,
-                "et0_fao_evapotranspiration": ET0_series
-            },
+            "daily": daily_payload,
             "metadata": {
                 "sources": {
-                    "visual_crossing_days": vc_days,
-                    "open_meteo_past_days": om_past_days,
-                    "open_meteo_forecast_days": len(om_forecast),
+                    "visual_crossing_days": 0,
+                    "open_meteo_past_days": total_past_received,
+                    "open_meteo_forecast_days": max(0, len(P_all) - total_past_days),
                     "total_past_days": total_past_received,
                     "completeness": completeness,
-                    "target_past_days": total_past_days
+                    "target_past_days": total_past_days,
+                    "backup_used": False
                 },
-                "quality_score": min(0.95, completeness * 0.9 + 0.1)
+                "quality_score": min(0.97, 0.9 + 0.07 * completeness)
             }
         }
-        
+
     except Exception as e:
-        logger.error(f"Hybrid weather fetch failed: {e}")
-        raise HTTPException(500, f"Errore sistema meteorologico ibrido: {e}")
+        logger.error(f"Primary Open‑Meteo failed: {e}; trying backup provider for history window")
+        vc_data = await fetch_visual_crossing_historical(lat, lon, days_back=total_past_days)
+        if not vc_data:
+            logger.error("Backup provider did not return data")
+            raise HTTPException(500, "Errore provider meteo: nessun dato disponibile")
+
+        # sort and extract arrays
+        vc_sorted = sorted(vc_data, key=lambda x: x.get("date"))
+        time_series = [d.get("date") for d in vc_sorted]
+        P_series = [float(d.get("precipitation_mm", 0.0)) for d in vc_sorted]
+        Tmin_series = [float(d.get("temp_min", 0.0)) for d in vc_sorted]
+        Tmax_series = [float(d.get("temp_max", 0.0)) for d in vc_sorted]
+        Tmean_series = [float(d.get("temp_mean", (d.get("temp_min",0.0)+d.get("temp_max",0.0))/2.0)) for d in vc_sorted]
+        RH_series = [float(d.get("humidity", 65.0)) for d in vc_sorted]
+        ET0_series = [float(d.get("et0", 2.0)) for d in vc_sorted]
+
+        daily_payload = {
+            "time": time_series,
+            "precipitation_sum": P_series,
+            "temperature_2m_min": Tmin_series,
+            "temperature_2m_max": Tmax_series,
+            "temperature_2m_mean": Tmean_series,
+            "relative_humidity_2m_mean": RH_series,
+            "et0_fao_evapotranspiration": ET0_series
+        }
+
+        completeness = min(1.0, float(len(P_series)) / float(total_past_days))
+        return {
+            "daily": daily_payload,
+            "metadata": {
+                "sources": {
+                    "visual_crossing_days": len(P_series),
+                    "open_meteo_past_days": 0,
+                    "open_meteo_forecast_days": 0,
+                    "total_past_days": len(P_series),
+                    "completeness": completeness,
+                    "target_past_days": total_past_days,
+                    "backup_used": True,
+                    "backup_provider": "visual_crossing"
+                },
+                "quality_score": min(0.9, 0.7 + 0.2 * completeness)
+            }
+        }
 
 # ===== ELEVAZIONE E MICROTOPOGRAFIA SUPER AVANZATA =====
 _elev_cache: Dict[str, Any] = {}
@@ -1370,8 +1380,8 @@ def build_analysis_hybrid_weather_v27(payload: Dict[str, Any], species_profile: 
     
     lines = []
     
-    lines.append("<h4>🌦️ Analisi Ibrida Meteorologica v2.5.7</h4>")
-    lines.append(f"<p><em>Sistema ibrido: Visual Crossing (giorni 8-15) + Open-Meteo (giorni 1-7 + forecast)</em></p>")
+    lines.append("<h4>🌦️ Analisi Dati Meteorologici v2.5.7</h4>")
+    lines.append(f"<p><em>Fonte primaria: Open‑Meteo (past_days=20). Backup usato solo se necessario.</em></p>")
     
     # Qualità dati meteorologici
     vc_days = weather_sources.get("visual_crossing_days", 0)
@@ -1382,8 +1392,8 @@ def build_analysis_hybrid_weather_v27(payload: Dict[str, Any], species_profile: 
     lines.append(f"<h4>📊 Qualità Dati Meteorologici</h4>")
     lines.append(f"<p><strong>Fonti utilizzate</strong>:</p>")
     lines.append("<ul style='margin:8px 0 0 20px'>")
-    lines.append(f"<li><strong>Visual Crossing</strong>: {vc_days} giorni storici (8-15 giorni fa)</li>")
-    lines.append(f"<li><strong>Open-Meteo</strong>: {om_past_days} giorni recenti + {om_forecast_days} giorni forecast</li>")
+    lines.append(f"<li><strong>Open‑Meteo</strong>: {om_past_days} giorni storici + {om_forecast_days} giorni forecast</li>")
+    lines.append(f"<li><strong>Backup</strong>: Visual Crossing — {vc_days} giorni (solo se attivo)</li>")
     lines.append("</ul>")
     
     quality_color = "#66e28a" if weather_quality >= 0.8 else "#ffc857" if weather_quality >= 0.6 else "#ff6b6b"
@@ -1522,7 +1532,7 @@ async def api_score_hybrid_weather(
         
         # Fetch paralleli con sistema ibrido
         tasks = [
-            fetch_hybrid_weather_data(lat, lon, total_past_days=15, future_days=10),
+            fetch_hybrid_weather_data(lat, lon, total_past_days=20, future_days=10),
             fetch_elevation_grid_super_advanced(lat, lon),
         ]
         
@@ -1588,7 +1598,7 @@ async def api_score_hybrid_weather(
         ET0_series = daily.get("et0_fao_evapotranspiration", [2.0] * len(P_series))
         RH_series = daily.get("relative_humidity_2m_mean", [65.0] * len(P_series))
         
-        past_days = 15
+        past_days = 20
         future_days = 10
         
         P_past = P_series[:past_days]
@@ -1794,7 +1804,8 @@ async def api_score_hybrid_weather(
             
             "API_star_mm": round(api_value, 1),
             "P7_mm": round(sum(P_past[-7:]), 1),
-            "P15_mm": round(sum(P_past), 1),
+            "P15_mm": round(sum(P_past[-15:]), 1),
+            "P20_mm": round(sum(P_past[-20:]), 1),
             "Tmean7_c": round(tmean_7d, 1),
             "RH7_pct": round(rh_7d, 1),
             "thermal_shock_index": round(thermal_shock, 2),
