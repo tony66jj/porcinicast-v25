@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>BoletusLab® – Sistema Previsionale Micologico</title>
+  <title>BoletusLab® – Sistema Previsionale Micologico Multi-Specie</title>
   
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
   
@@ -13,6 +13,8 @@
       --accent:#62d5b4; --accent-2:#8bb7ff; --danger:#ff6b6b; --warn:#ffc857; --ok:#66e28a;
       --shadow:0 8px 24px rgba(0,0,0,.35);
       --radius:14px;
+      /* Colori per le specie */
+      --edulis:#62d5b4; --reticulatus:#ff9500; --aereus:#ff6b6b; --pinophilus:#8bb7ff;
     }
     *{box-sizing:border-box}
     html,body{margin:0;background:linear-gradient(180deg,#0a0c0f 0%,#0d1218 100%);color:var(--text);font:16px/1.5 system-ui,Segoe UI,Roboto,Helvetica,Arial,sans-serif}
@@ -23,7 +25,7 @@
     header .badge{padding:4px 10px;border-radius:999px;background:linear-gradient(90deg,#1b2230,#17202b);color:#cfe6ff;border:1px solid #283343}
     .panel{background:linear-gradient(180deg,#12161b,#0f141a);border:1px solid #1e2937;border-radius:var(--radius);box-shadow:var(--shadow); margin-bottom: 20px;}
     .panel h3{margin:0 0 8px 0;font-size:18px}
-            .controls{display:grid;grid-template-columns:1.1fr .8fr .8fr .8fr .9fr .8fr auto;gap:10px;align-items:end;padding:16px}
+    .controls{display:grid;grid-template-columns:1.1fr .8fr .8fr .8fr .9fr .8fr auto;gap:10px;align-items:end;padding:16px}
     label{font-size:12px;color:var(--muted);display:block;margin-bottom:6px}
     input[type=text],input[type=number],select{
       width:100%;padding:10px 12px;border-radius:10px;border:1px solid #243142;background:#0d141b;color:var(--text)
@@ -124,6 +126,8 @@
     .field-analysis p{margin:8px 0;color:#d8e3f0}
     .field-analysis em{color:var(--muted);font-style:italic}
     .field-analysis strong{color:#fff;font-weight:600}
+    .field-analysis ul{margin:8px 0 0 20px;color:#d8e3f0}
+    .field-analysis li{margin:4px 0}
     .return-advice{
       background:linear-gradient(135deg,#1a2a3e,#0f1925);
       border-left:4px solid var(--accent);
@@ -163,6 +167,120 @@
       font-size: 11px;
       font-weight: 600;
     }
+
+    /* Toggle Switch per ERA5-Land */
+    .toggle-switch {
+      position: relative;
+      display: inline-block;
+      width: 60px;
+      height: 34px;
+    }
+    
+    .toggle-switch input {
+      opacity: 0;
+      width: 0;
+      height: 0;
+    }
+    
+    .slider {
+      position: absolute;
+      cursor: pointer;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background-color: #2196F3;
+      transition: .4s;
+      border-radius: 34px;
+    }
+    
+    .slider:before {
+      position: absolute;
+      content: "";
+      height: 26px;
+      width: 26px;
+      left: 4px;
+      bottom: 4px;
+      background-color: white;
+      transition: .4s;
+      border-radius: 50%;
+    }
+    
+    input:checked + .slider {
+      background-color: #2196F3;
+    }
+    
+    input:focus + .slider {
+      box-shadow: 0 0 1px #2196F3;
+    }
+    
+    input:checked + .slider:before {
+      transform: translateX(26px);
+    }
+
+    /* Multi-species legend */
+    .species-legend {
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+      margin: 8px 0;
+      padding: 12px;
+      background: #0a0f14;
+      border-radius: 8px;
+      border: 1px solid #1e2937;
+    }
+    
+    .species-legend-item {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 8px;
+      background: #12161b;
+      border-radius: 6px;
+      font-size: 12px;
+    }
+    
+    .species-color-dot {
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      border: 2px solid white;
+    }
+    
+    .species-probability {
+      font-weight: 600;
+      color: var(--accent);
+    }
+
+    /* Weather source controls */
+    .weather-controls {
+      background: #0a0f14;
+      border: 1px solid #1e2937;
+      border-radius: 8px;
+      padding: 12px;
+      margin-top: 8px;
+    }
+    
+    .weather-controls h5 {
+      margin: 0 0 8px 0;
+      color: var(--accent);
+      font-size: 14px;
+    }
+    
+    .weather-toggle-group {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin: 8px 0;
+    }
+    
+    .weather-toggle-label {
+      font-size: 12px;
+      color: var(--muted);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
     
     @media (max-width: 768px) {
       .controls{grid-template-columns:1fr;gap:8px}
@@ -173,16 +291,17 @@
       #map{height:280px}
       #chart{height:280px!important;max-height:280px!important}
       .panel{overflow:hidden}
+      .species-legend{flex-direction:column;gap:8px}
     }
   </style>
 </head>
 <body>
   <div class="wrap">
     <header>
-      <h1>🍄 BoletusLab® – Sistema Previsionale Micologico</h1>
+      <h1>🍄 BoletusLab® – Sistema Previsionale Micologico Multi-Specie</h1>
       <span class="badge version-badge">v2.5.7</span>
       <span class="badge scientific-badge">Algoritmi Scientifici Boletus spp.</span>
-      <span class="badge">Previsione Fruttificazione</span>
+      <span class="badge">Curve Sovrapposte</span>
     </header>
 
     <div class="panel">
@@ -231,9 +350,6 @@
             <option value="W">Ovest (W)</option>
             <option value="NW">Nord-Ovest (NW)</option>
           </select>
-          <div style="margin-top:8px;">
-            
-          </div>
         </div>
         <div>
           <label>Ore sul campo</label>
@@ -243,6 +359,26 @@
         </div>
         <div style="display:flex;gap:8px;">
           <button id="btnGeo" class="btn" title="Cerca">🔍 Cerca</button>
+        </div>
+      </div>
+      
+      <!-- Controlli meteo avanzati -->
+      <div class="weather-controls">
+        <h5>🌦️ Fonti Dati Meteorologici</h5>
+        <div class="weather-toggle-group">
+          <label class="weather-toggle-label">
+            <span class="toggle-switch">
+              <input type="checkbox" id="era5-toggle">
+              <span class="slider"></span>
+            </span>
+            🛰️ ERA5-Land (umidità suolo satellitare)
+          </label>
+          <span id="era5-status" class="chip">Disattivato</span>
+        </div>
+        <div style="font-size: 11px; color: var(--muted); margin-top: 8px;">
+          <strong>Primario:</strong> Open-Meteo (20d storici + 10d forecast) • 
+          <strong>Backup:</strong> Visual Crossing • 
+          <strong>Satellitare:</strong> ERA5-Land (opzionale)
         </div>
       </div>
     </div>
@@ -260,6 +396,9 @@
         <div style="margin-top:8px;">
           <span id="k-model-version" class="chip">v2.5.7</span>
           <span id="k-has-validations" class="chip">validazioni: —</span>
+        </div>
+        <div id="species-info" style="margin-top:12px;">
+          <div id="species-dominance" class="muted" style="font-size:12px;">Specie: —</div>
         </div>
       </div>
       
@@ -305,12 +444,18 @@
     </div>
 
     <div class="panel section">
-      <h3>📈 Previsione Prossimi 10 Giorni (Step-Function Scientifica)</h3>
+      <h3>📈 Previsione Multi-Specie con Curve Sovrapposte</h3>
       <div style="margin-bottom:8px;color:var(--muted);font-size:12px;">
-        ✨ <strong>BoletusLab v2.5.7:</strong> Lag specie-specifico • Umidità cumulativa • Esposizione corretta • Algoritmi scientifici Boletus spp.
+        ✨ <strong>BoletusLab v2.5.7:</strong> Curve probabilistiche per specie coesistenti • Lag specie-specifico • Algoritmi basati su letteratura scientifica
       </div>
+      
+      <!-- Legenda specie -->
+      <div id="species-legend" class="species-legend" style="display:none;">
+        <!-- Sarà popolata dinamicamente -->
+      </div>
+      
       <div class="lag-explanation" id="lag-explanation" style="display:none;">
-        💡 <strong>Fruttificazione Step-Function:</strong> Basato su letteratura scientifica - i funghi appaiono improvvisamente "tutto o niente" dopo lag biologico specie-specifico.
+        💡 <strong>Fruttificazione Step-Function Multi-Specie:</strong> Curve sovrapposte mostrano timing diversi basati su lag biologico specie-specifico secondo letteratura scientifica.
       </div>
       <div style="width:100%;max-width:100%;overflow:hidden;position:relative;">
         <canvas id="chart" style="width:100%!important;height:350px!important;max-width:100%!important;"></canvas>
@@ -321,7 +466,7 @@
     </div>
 
     <div class="panel section">
-      <h3>🧭 Analisi Scientifica Dettagliata v2.5.7</h3>
+      <h3>🧭 Analisi Biologica Scientifica Dettagliata v2.5.7</h3>
       <div id="field-analysis" class="field-analysis">
         <p class="muted">Esegui un'analisi per vedere i dettagli scientifici con algoritmi BoletusLab.</p>
       </div>
@@ -349,7 +494,7 @@
           <p class="muted">In attesa di analisi...</p>
         </div>
         <div id="cumulative-moisture-info" style="margin-top:12px;">
-          <h4>🌊 Sistema Meteorologico Ibrido v2.5.7</h4>
+          <h4>🌊 Sistema Meteorologico Ibrido + ERA5-Land</h4>
           <div id="cumulative-moisture-value" class="muted">In attesa di calcolo qualità weather...</div>
         </div>
       </div>
@@ -357,7 +502,7 @@
 
     <div class="panel section crowdsource">
       <h3>🧬 Contribuisci alla Ricerca Scientifica</h3>
-      <p style="margin-bottom:20px;color:#cfe6ff;">Aiuta a perfezionare gli algoritmi BoletusLab condividendo le tue osservazioni. I dati alimentano l'algoritmo di machine learning per migliorare la previsione della fruttificazione fungina.</p>
+      <p style="margin-bottom:20px;color:#cfe6ff;">Aiuta a perfezionare gli algoritmi BoletusLab condividendo le tue osservazioni. I dati alimentano l'algoritmo di machine learning per migliorare la previsione della fruttificazione fungina multi-specie.</p>
       
       <div class="grid g2">
         <div>
@@ -413,9 +558,9 @@
 
     
 <footer>
-  <p>🍄 <strong>BoletusLab® v2.5.7</strong> – Sistema previsionale micologico per fruttificazione <em>Boletus</em> spp.</p>
-  <p><strong>Tecnologie:</strong> Sistema meteorologico ibrido Visual Crossing + Open-Meteo • Lag biologico specie-specifico • Umidità cumulativa • Step-function fruttificazione</p>
-  <p><strong>Base scientifica:</strong> Mumcu Küçüker (2019), Martínez-Peña et al. (2012), Parladé et al. (2017), Tahvanainen et al. (2016), de la Varga et al. (2013)</p>
+  <p>🍄 <strong>BoletusLab® v2.5.7</strong> – Sistema previsionale micologico multi-specie per fruttificazione <em>Boletus</em> spp.</p>
+  <p><strong>Tecnologie:</strong> Sistema meteorologico ibrido Visual Crossing + Open-Meteo + ERA5-Land • Curve sovrapposte per coesistenza specie • Lag biologico specie-specifico • Umidità cumulativa</p>
+  <p><strong>Base scientifica:</strong> Mumcu Küçüker (2019), Martínez-Peña et al. (2012), Parladé et al. (2017), Tahvanainen et al. (2016), de la Varga et al. (2013), Viitanen (1997)</p>
   <p><strong>Sviluppato da Antonio Pio D'Aloia</strong> • FastAPI • NumPy/SciPy • SQLite • Docker • Machine Learning • Leaflet.js</p>
   <p><small>BoletusLab® è un marchio registrato. Tutti i diritti riservati.</small></p>
 </footer>
@@ -436,6 +581,16 @@
     let currentLocation = { lat: null, lon: null };
     let map = null;
     let mapMarker = null;
+    let currentSpeciesData = null; // Per gestire dati multi-specie
+
+    // Colori per le specie
+    const SPECIES_COLORS = {
+      'edulis': '#62d5b4',
+      'reticulatus': '#ff9500', 
+      'aereus': '#ff6b6b',
+      'pinophilus': '#8bb7ff',
+      'mixed': '#ffc857'
+    };
 
     // === DEBUG SYSTEM ===
     function debugLog(message, data = null) {
@@ -506,7 +661,7 @@
 
     async function getAnalysis(lat, lon, habitat = '', hours = 4) {
       try {
-        debugLog('Starting hybrid weather analysis:', { lat, lon, habitat, hours });
+        debugLog('Starting multi-species analysis:', { lat, lon, habitat, hours });
         const params = new URLSearchParams({
           lat: lat.toString(),
           lon: lon.toString(),
@@ -515,7 +670,7 @@
           autohabitat: habitat ? '0' : '1'
         });
         
-        // NUOVO: Aggiungi parametri esposizione
+        // Aggiungi parametri esposizione
         try {
           const aspectMode = document.getElementById('aspect-mode').value;
           const aspectOctant = document.getElementById('aspect-octant').value;
@@ -526,6 +681,14 @@
         } catch (e) { 
           debugLog('Aspect params error:', e); 
         }
+
+        // NUOVO: Aggiungi parametro ERA5-Land
+        try {
+          const era5Enabled = document.getElementById('era5-toggle').checked;
+          params.set('use_era5', era5Enabled ? '1' : '0');
+        } catch (e) {
+          debugLog('ERA5 toggle error:', e);
+        }
         
         const response = await fetch(`${API_BASE}/api/score?${params}`);
         if (!response.ok) {
@@ -533,21 +696,23 @@
             throw new Error(`HTTP ${response.status}: ${errData.detail || 'Errore sconosciuto'}`);
         }
         const result = await response.json();
-        debugLog('Hybrid weather analysis result:', {
+        debugLog('Multi-species analysis result:', {
           hasIndex: !!result.index,
           hasForecast: Array.isArray(result.forecast),
           forecastLength: result.forecast?.length,
           hasFlushEvents: Array.isArray(result.flush_events),
           eventsCount: result.flush_events?.length,
           hasSpeciesLag: !!result.species,
+          hasSpeciesCoexistence: !!result.species_probabilities,
+          hasMultipleForecasts: !!result.species_forecasts,
           hasCumulativeMoisture: !!result.cumulative_moisture_index,
           weatherQuality: result.weather_quality_score,
           weatherSources: result.weather_sources
         });
         return result;
       } catch (error) {
-        debugLog('Hybrid weather analysis error:', error);
-        throw new Error(`Errore analisi sistema ibrido: ${error.message}`);
+        debugLog('Multi-species analysis error:', error);
+        throw new Error(`Errore analisi sistema multi-specie: ${error.message}`);
       }
     }
 
@@ -594,7 +759,7 @@
 
     // === UI UPDATES ===
     function updateKPIs(data) {
-      debugLog('Updating KPIs hybrid weather:', data);
+      debugLog('Updating KPIs multi-species:', data);
       
       try {
         document.getElementById('k-index').textContent = `${data.index}/100`;
@@ -625,33 +790,103 @@
         const hasValidations = data.has_local_validations ? 'Sì' : 'No';
         document.getElementById('k-has-validations').textContent = `validazioni: ${hasValidations}`;
         
-        // NUOVO: Mostra qualità e fonti weather del sistema ibrido
+        // NUOVO: Gestione specie multiple
+        updateSpeciesInfo(data);
+        
+        // NUOVO: Mostra qualità e fonti weather del sistema ibrido + ERA5
         if (data.weather_quality_score !== undefined) {
           const qualityDiv = document.getElementById('cumulative-moisture-value');
           if (qualityDiv) {
             const weatherSources = data.weather_sources || {};
             const vcDays = weatherSources.visual_crossing_days || 0;
             const omDays = weatherSources.open_meteo_past_days || 0;
+            const era5Status = data.era5_enabled ? 'Attivo' : 'Disattivo';
             const qualityColor = data.weather_quality_score >= 0.8 ? '#66e28a' : data.weather_quality_score >= 0.6 ? '#ffc857' : '#ff6b6b';
             
             qualityDiv.innerHTML = `
-              <strong>Qualità Weather Ibrida:</strong> <span style="color:${qualityColor}">${data.weather_quality_score.toFixed(2)}</span>/1.00<br>
-              <strong>Fonti:</strong> Visual Crossing (${vcDays}d) + Open-Meteo (${omDays}d)<br>
-              <strong>Umidità Cumulativa:</strong> ${data.cumulative_moisture_index.toFixed(1)} mm
+              <strong>Qualità Weather Multi-Fonte:</strong> <span style="color:${qualityColor}">${data.weather_quality_score.toFixed(2)}</span>/1.00<br>
+              <strong>Fonti:</strong> Visual Crossing (${vcDays}d) + Open-Meteo (${omDays}d) + ERA5-Land (${era5Status})<br>
+              <strong>Umidità Cumulativa:</strong> ${data.cumulative_moisture_index?.toFixed(1) || 0} mm
             `;
             qualityDiv.className = data.weather_quality_score >= 0.8 ? 'chip ok' : data.weather_quality_score >= 0.6 ? 'chip warn' : 'chip bad';
           }
         }
         
-        debugLog('KPIs updated successfully with hybrid weather system');
+        debugLog('KPIs updated successfully with multi-species system');
       } catch (error) {
         debugLog('Error updating KPIs:', error);
         showNotification('Errore aggiornamento KPI', 'error');
       }
     }
 
+    function updateSpeciesInfo(data) {
+      try {
+        const speciesDiv = document.getElementById('species-dominance');
+        if (!speciesDiv) return;
+
+        // Se abbiamo probabilità multiple, mostra coesistenza
+        if (data.species_probabilities && Object.keys(data.species_probabilities).length > 1) {
+          const sorted = Object.entries(data.species_probabilities)
+            .sort((a, b) => b[1] - a[1])
+            .filter(([species, prob]) => prob > 0.1); // Solo specie significative
+
+          if (sorted.length > 1) {
+            const speciesText = sorted.map(([species, prob]) => 
+              `<em>B. ${species}</em> (${Math.round(prob * 100)}%)`
+            ).join(' + ');
+            speciesDiv.innerHTML = `<strong>Coesistenza:</strong> ${speciesText}`;
+            
+            // Mostra legenda specie
+            updateSpeciesLegend(sorted);
+            return;
+          }
+        }
+
+        // Specie singola dominante
+        const species = data.species || 'reticulatus';
+        speciesDiv.innerHTML = `<strong>Specie dominante:</strong> <em>Boletus ${species}</em>`;
+        
+        // Nascondi legenda per specie singola
+        document.getElementById('species-legend').style.display = 'none';
+        
+      } catch (error) {
+        debugLog('Error updating species info:', error);
+      }
+    }
+
+    function updateSpeciesLegend(speciesProbabilities) {
+      try {
+        const legendDiv = document.getElementById('species-legend');
+        if (!legendDiv || !speciesProbabilities || speciesProbabilities.length <= 1) {
+          legendDiv.style.display = 'none';
+          return;
+        }
+
+        let html = '';
+        speciesProbabilities.forEach(([species, probability]) => {
+          const color = SPECIES_COLORS[species] || SPECIES_COLORS.mixed;
+          const percentage = Math.round(probability * 100);
+          
+          html += `
+            <div class="species-legend-item">
+              <div class="species-color-dot" style="background-color: ${color}"></div>
+              <span><em>B. ${species}</em></span>
+              <span class="species-probability">${percentage}%</span>
+            </div>
+          `;
+        });
+
+        legendDiv.innerHTML = html;
+        legendDiv.style.display = 'flex';
+        
+        debugLog('Species legend updated:', speciesProbabilities);
+      } catch (error) {
+        debugLog('Error updating species legend:', error);
+      }
+    }
+
     function updateChart(forecast, data = null) {
-      debugLog('Updating chart with hybrid weather forecast:', forecast);
+      debugLog('Updating multi-species chart:', forecast);
       
       if (!checkChartJS()) {
         return;
@@ -662,7 +897,7 @@
         if (!Array.isArray(forecast) || forecast.length === 0) {
           debugLog('❌ Forecast non valido:', forecast);
           document.getElementById('chart-error').style.display = 'block';
-          document.getElementById('chart-error').textContent = 'Dati previsione non disponibili dal sistema ibrido';
+          document.getElementById('chart-error').textContent = 'Dati previsione non disponibili dal sistema multi-specie';
           return;
         }
         
@@ -679,76 +914,115 @@
         }
         
         const labels = forecast.map((_, i) => `Giorno ${i + 1}`);
+        const datasets = [];
         
-        // CALCOLA ZONE ROSSE DI FRUTTIFICAZIONE
-        let fruitingZones = [];
-        if (data && data.flush_events) {
-          const pastDays = 20; // Come nel backend
-          data.flush_events.forEach(event => {
-            if (!event.observed) { // Solo eventi futuri
-              const eventIdx = event.event_day_index;
-              const lagDays = event.lag_days || 8;
-              const fruitingDay = eventIdx + lagDays - pastDays; // Converte in indice forecast
-              
-              if (fruitingDay >= 0 && fruitingDay < forecast.length) {
-                fruitingZones.push({
-                  start: Math.max(0, fruitingDay - 1),
-                  end: Math.min(forecast.length - 1, fruitingDay + 2),
-                  peak: fruitingDay
-                });
+        // GESTIONE MULTI-SPECIE
+        if (data && data.species_forecasts && Object.keys(data.species_forecasts).length > 1) {
+          // CURVE MULTIPLE SOVRAPPOSTE
+          const speciesProbabilities = data.species_probabilities || {};
+          
+          Object.entries(data.species_forecasts).forEach(([species, speciesForecast]) => {
+            const probability = speciesProbabilities[species] || 0;
+            if (probability < 0.1) return; // Skip specie con probabilità troppo bassa
+            
+            const color = SPECIES_COLORS[species] || SPECIES_COLORS.mixed;
+            const alpha = 0.4 + (probability * 0.6); // Trasparenza basata su probabilità
+            
+            datasets.push({
+              label: `🍄 B. ${species} (${Math.round(probability * 100)}%)`,
+              data: speciesForecast,
+              borderColor: color,
+              backgroundColor: color + Math.floor(alpha * 255).toString(16).padStart(2, '0'),
+              borderWidth: 3,
+              fill: true,
+              tension: 0.2,
+              pointBackgroundColor: color,
+              pointBorderColor: '#ffffff',
+              pointBorderWidth: 2,
+              pointRadius: 5,
+              pointHoverRadius: 8
+            });
+          });
+          
+          // Mostra spiegazione curve multiple
+          const lagExplanation = document.getElementById('lag-explanation');
+          if (lagExplanation) {
+            lagExplanation.innerHTML = `💡 <strong>Curve Sovrapposte Multi-Specie:</strong> Ogni curva rappresenta una specie con timing di fruttificazione diverso. Le aree colorate mostrano la probabilità di coesistenza basata su letteratura scientifica.`;
+            lagExplanation.style.display = 'block';
+          }
+          
+        } else {
+          // CURVA SINGOLA (sistema tradizionale)
+          const species = data?.species || 'reticulatus';
+          const color = SPECIES_COLORS[species] || SPECIES_COLORS.mixed;
+          
+          // CALCOLA ZONE ROSSE DI FRUTTIFICAZIONE per specie singola
+          let fruitingZones = [];
+          if (data && data.flush_events) {
+            const pastDays = 20;
+            data.flush_events.forEach(event => {
+              if (!event.observed) {
+                const eventIdx = event.event_day_index;
+                const lagDays = event.lag_days || 8;
+                const fruitingDay = eventIdx + lagDays - pastDays;
+                
+                if (fruitingDay >= 0 && fruitingDay < forecast.length) {
+                  fruitingZones.push({
+                    start: Math.max(0, fruitingDay - 1),
+                    end: Math.min(forecast.length - 1, fruitingDay + 2),
+                    peak: fruitingDay
+                  });
+                }
               }
-            }
+            });
+          }
+          
+          // Dataset principale
+          datasets.push({
+            label: `🍄 B. ${species} (Dominante)`,
+            data: forecast,
+            borderColor: color,
+            backgroundColor: color + '26',
+            borderWidth: 3,
+            fill: true,
+            tension: 0.2,
+            pointBackgroundColor: forecast.map((_, i) => {
+              const inFruitingZone = fruitingZones.some(zone => i >= zone.start && i <= zone.end);
+              return inFruitingZone ? '#ff6b6b' : color;
+            }),
+            pointBorderColor: '#ffffff',
+            pointBorderWidth: 2,
+            pointRadius: forecast.map((_, i) => {
+              const inFruitingZone = fruitingZones.some(zone => i >= zone.start && i <= zone.end);
+              return inFruitingZone ? 7 : 5;
+            }),
+            pointHoverRadius: 8
+          });
+          
+          // Zone rosse per specie singola
+          fruitingZones.forEach((zone, idx) => {
+            const zoneData = forecast.map((value, i) => {
+              return (i >= zone.start && i <= zone.end) ? value : null;
+            });
+            
+            datasets.push({
+              label: `🔴 Fruttificazione ${idx + 1}`,
+              data: zoneData,
+              borderColor: '#ff6b6b',
+              backgroundColor: 'rgba(255, 107, 107, 0.3)',
+              borderWidth: 4,
+              fill: true,
+              tension: 0.1,
+              pointBackgroundColor: '#ff6b6b',
+              pointBorderColor: '#ffffff',
+              pointBorderWidth: 2,
+              pointRadius: 6,
+              pointHoverRadius: 8
+            });
           });
         }
         
-        // DATASET PRINCIPALE
-        const datasets = [{
-          label: 'Indice Fruttificazione (Sistema Ibrido)',
-          data: forecast,
-          borderColor: '#62d5b4',
-          backgroundColor: 'rgba(98, 213, 180, 0.15)',
-          borderWidth: 3,
-          fill: true,
-          tension: 0.2,
-          pointBackgroundColor: forecast.map((_, i) => {
-            // PUNTI ROSSI nelle zone di fruttificazione
-            const inFruitingZone = fruitingZones.some(zone => i >= zone.start && i <= zone.end);
-            return inFruitingZone ? '#ff6b6b' : '#62d5b4';
-          }),
-          pointBorderColor: '#ffffff',
-          pointBorderWidth: 2,
-          pointRadius: forecast.map((_, i) => {
-            // PUNTI PIÙ GRANDI nelle zone di fruttificazione
-            const inFruitingZone = fruitingZones.some(zone => i >= zone.start && i <= zone.end);
-            return inFruitingZone ? 7 : 5;
-          }),
-          pointHoverRadius: 8,
-          stepped: false
-        }];
-        
-        // DATASET ZONE ROSSE DI FRUTTIFICAZIONE
-        fruitingZones.forEach((zone, idx) => {
-          const zoneData = forecast.map((value, i) => {
-            return (i >= zone.start && i <= zone.end) ? value : null;
-          });
-          
-          datasets.push({
-            label: `🍄 Fruttificazione ${idx + 1}`,
-            data: zoneData,
-            borderColor: '#ff6b6b',
-            backgroundColor: 'rgba(255, 107, 107, 0.3)',
-            borderWidth: 4,
-            fill: true,
-            tension: 0.1,
-            pointBackgroundColor: '#ff6b6b',
-            pointBorderColor: '#ffffff',
-            pointBorderWidth: 2,
-            pointRadius: 6,
-            pointHoverRadius: 8
-          });
-        });
-        
-        // CHART.JS v3.9.1 SYNTAX - ALTEZZA AUMENTATA A 350px
+        // CHART.JS v3.9.1 SYNTAX
         currentChart = new Chart(ctx, {
           type: 'line',
           data: {
@@ -778,7 +1052,6 @@
                   color: '#8aa0b6',
                   font: { size: 12 },
                   filter: function(legendItem, chartData) {
-                    // Mostra solo dataset con dati
                     return legendItem.datasetIndex === 0 || 
                            chartData.datasets[legendItem.datasetIndex].data.some(v => v !== null);
                   }
@@ -787,8 +1060,11 @@
               tooltip: {
                 callbacks: {
                   afterLabel: function(context) {
-                    if (context.datasetIndex > 0) {
+                    if (context.datasetIndex > 0 && context.dataset.label.includes('Fruttificazione')) {
                       return '🔴 USCITA PORCINI PREVISTA!';
+                    }
+                    if (context.dataset.label.includes('B.')) {
+                      return `Specie: ${context.dataset.label}`;
                     }
                     return '';
                   }
@@ -835,12 +1111,12 @@
         
         // Nascondi messaggio errore
         document.getElementById('chart-error').style.display = 'none';
-        debugLog('✅ Hybrid weather chart created successfully with', forecast.length, 'data points and', fruitingZones.length, 'fruiting zones');
+        debugLog('✅ Multi-species chart created successfully with', forecast.length, 'data points');
         
       } catch (error) {
-        debugLog('❌ Error creating hybrid weather chart:', error);
+        debugLog('❌ Error creating multi-species chart:', error);
         document.getElementById('chart-error').style.display = 'block';
-        document.getElementById('chart-error').textContent = `Errore grafico sistema ibrido: ${error.message}`;
+        document.getElementById('chart-error').textContent = `Errore grafico sistema multi-specie: ${error.message}`;
       }
     }
 
@@ -937,7 +1213,7 @@
     }
 
     function updateFlushEvents(data) {
-      debugLog('Updating flush events hybrid weather:', {
+      debugLog('Updating flush events multi-species:', {
         hasEvents: Array.isArray(data.flush_events),
         eventCount: data.flush_events?.length || 0
       });
@@ -971,7 +1247,7 @@
           if (hasVariableLag && lagExplanation) {
             const minLag = Math.min(...lagValues);
             const maxLag = Math.max(...lagValues);
-            lagExplanation.innerHTML = `💡 <strong>Lag Biologico Specie-Specifico:</strong> Range ${minLag}-${maxLag} giorni per <em>B. ${speciesInfo}</em> basato su umidità suolo, shock termico, umidità cumulativa e stress VPD secondo letteratura scientifica.`;
+            lagExplanation.innerHTML = `💡 <strong>Lag Biologico Multi-Specie:</strong> Range ${minLag}-${maxLag} giorni per diverse specie di <em>Boletus</em> basato su umidità suolo, shock termico, umidità cumulativa e stress VPD secondo letteratura scientifica.`;
             lagExplanation.style.display = 'block';
           }
           
@@ -979,14 +1255,14 @@
           eventsDiv.innerHTML = '<p class="muted">Nessun evento significativo rilevato</p>';
         }
         
-        debugLog('✅ Flush events updated successfully with species-specific lag');
+        debugLog('✅ Flush events updated successfully with multi-species lag');
       } catch (error) {
         debugLog('❌ Error updating flush events:', error);
       }
     }
 
     function updateFieldAnalysis(data) {
-      debugLog('Updating field analysis hybrid weather:', {
+      debugLog('Updating field analysis multi-species:', {
         hasExplanation: !!data.dynamic_explanation,
         explanationLength: data.dynamic_explanation?.length || 0
       });
@@ -994,15 +1270,145 @@
       try {
         const analysisDiv = document.getElementById('field-analysis');
         if (data.dynamic_explanation && data.dynamic_explanation.trim() !== '') {
-          analysisDiv.innerHTML = data.dynamic_explanation;
+          // Arricchisci l'analisi con informazioni multi-specie
+          let analysis = data.dynamic_explanation;
+          
+          // Aggiungi sezione specifica per coesistenza se presente
+          if (data.species_probabilities && Object.keys(data.species_probabilities).length > 1) {
+            const coexistenceSection = buildCoexistenceAnalysis(data);
+            analysis += coexistenceSection;
+          }
+          
+          // Aggiungi consigli pratici dettagliati
+          const practicalAdvice = buildPracticalAdvice(data);
+          analysis += practicalAdvice;
+          
+          analysisDiv.innerHTML = analysis;
         } else {
           analysisDiv.innerHTML = '<p class="muted">Analisi scientifica dettagliata non disponibile per questa località</p>';
         }
         
-        debugLog('✅ Field analysis updated successfully with hybrid weather data');
+        debugLog('✅ Field analysis updated successfully with multi-species data');
       } catch (error) {
         debugLog('❌ Error updating field analysis:', error);
       }
+    }
+
+    function buildCoexistenceAnalysis(data) {
+      if (!data.species_probabilities || Object.keys(data.species_probabilities).length <= 1) {
+        return '';
+      }
+
+      const sorted = Object.entries(data.species_probabilities)
+        .sort((a, b) => b[1] - a[1])
+        .filter(([species, prob]) => prob > 0.1);
+
+      if (sorted.length <= 1) return '';
+
+      let html = `
+        <h4>🧬 Analisi Coesistenza Multi-Specie</h4>
+        <p>In questa località è stata rilevata la <strong>coesistenza probabile</strong> di più specie di <em>Boletus</em>, 
+        fenomeno documentato in letteratura scientifica nelle zone di transizione ecologica. Le specie identificate sono:</p>
+        <ul>
+      `;
+
+      sorted.forEach(([species, probability]) => {
+        const percentage = Math.round(probability * 100);
+        const speciesInfo = getSpeciesEcologyInfo(species);
+        html += `<li><strong><em>Boletus ${species}</em></strong> (${percentage}% probabilità): ${speciesInfo}</li>`;
+      });
+
+      html += `
+        </ul>
+        <p><em>La coesistenza di specie diverse comporta tempistiche di fruttificazione leggermente sfasate, 
+        offrendo opportunità di raccolta più ampie nel tempo. Ogni specie mantiene le proprie preferenze 
+        microclimatiche all'interno del stesso habitat.</em></p>
+      `;
+
+      return html;
+    }
+
+    function getSpeciesEcologyInfo(species) {
+      const ecologyInfo = {
+        'edulis': 'preferisce versanti freschi e umidi, fruttificazione tipicamente autunnale',
+        'reticulatus': 'adattato a zone più calde e asciutte, fruttificazione estiva predominante',
+        'aereus': 'specie termofila, associata a querce in zone mediterranee',
+        'pinophilus': 'legato a conifere, tollera altitudini maggiori'
+      };
+      return ecologyInfo[species] || 'ecologia specifica in fase di studio';
+    }
+
+    function buildPracticalAdvice(data) {
+      const species = data.species || 'reticulatus';
+      const index = data.index || 0;
+      const bestWindow = data.best_window;
+      const elevation = data.elevation_m || 800;
+      const habitat = data.habitat_used || 'misto';
+      const hasCoexistence = data.species_probabilities && Object.keys(data.species_probabilities).length > 1;
+
+      let html = `
+        <h4>📍 Consigli Pratici per il Campo</h4>
+        <p><strong>Strategia di ricerca consigliata:</strong></p>
+        <ul>
+      `;
+
+      if (hasCoexistence) {
+        html += `
+          <li><strong>Approccio multi-specie:</strong> Data la coesistenza rilevata, esplora microhabitat diversi 
+          nella stessa area. Le specie possono fruttificare in zone leggermente diverse anche a pochi metri di distanza.</li>
+          <li><strong>Timing differenziato:</strong> Pianifica visite multiple nei prossimi giorni, 
+          poiché ogni specie ha il proprio lag biologico specifico.</li>
+        `;
+      }
+
+      if (bestWindow && bestWindow.mean > 40) {
+        html += `
+          <li><strong>Finestra ottimale:</strong> Concentra la ricerca nei giorni ${bestWindow.start + 1}-${bestWindow.end + 1}, 
+          quando l'indice previsto raggiunge ~${bestWindow.mean}.</li>
+        `;
+      }
+
+      // Consigli specifici per habitat
+      const habitatAdvice = {
+        'faggio': 'Cerca nelle zone più umide e fresche, sotto le chiome più dense. Controlla i versanti nord.',
+        'quercia': 'Esplora i margini del bosco e le radure, dove la luce filtra attraverso la chioma.',
+        'castagno': 'Concentrati sui versanti sud-est e nelle zone con sottobosco rado.',
+        'conifere': 'Cerca nelle zone con accumulo di aghi, lontano dai sentieri battuti.',
+        'misto': 'Esplora la varietà di microhabitat disponibili, dalle zone più umide a quelle più asciutte.'
+      };
+
+      html += `<li><strong>Habitat ${habitat}:</strong> ${habitatAdvice[habitat] || habitatAdvice.misto}</li>`;
+
+      // Consigli basati sull'elevazione
+      if (elevation > 1200) {
+        html += `<li><strong>Alta quota (${elevation}m):</strong> Le condizioni possono cambiare rapidamente. 
+        Porta abbigliamento adeguato e controlla le previsioni meteo dettagliate.</li>`;
+      } else if (elevation < 600) {
+        html += `<li><strong>Bassa quota (${elevation}m):</strong> Le temperature più miti accelerano i processi biologici. 
+        Anticipa leggermente i tempi previsti dal modello.</li>`;
+      }
+
+      // Consigli basati sull'indice
+      if (index > 70) {
+        html += `<li><strong>Condizioni eccellenti:</strong> L'indice elevato (${index}) suggerisce fruttificazione massiva. 
+        Porta contenitori aggiuntivi e rispetta i limiti di raccolta.</li>`;
+      } else if (index > 40) {
+        html += `<li><strong>Condizioni buone:</strong> L'indice moderato (${index}) indica fruttificazione probabile ma localizzata. 
+        Esplora attentamente i microhabitat più favorevoli.</li>`;
+      } else {
+        html += `<li><strong>Condizioni difficili:</strong> L'indice basso (${index}) richiede ricerca molto accurata. 
+        Concentrati sui punti storicamente più produttivi.</li>`;
+      }
+
+      html += `
+        </ul>
+        <div class="return-advice">
+          <strong>💡 Ricorda:</strong> I modelli scientifici forniscono probabilità, non certezze. 
+          L'esperienza sul campo e la conoscenza locale rimangono fondamentali per il successo della ricerca micologica.
+        </div>
+      `;
+
+      return html;
     }
 
     async function updateValidationStats() {
@@ -1031,6 +1437,19 @@
       }
     }
 
+    function updateERA5Status(enabled) {
+      const statusSpan = document.getElementById('era5-status');
+      if (statusSpan) {
+        if (enabled) {
+          statusSpan.textContent = 'Attivo';
+          statusSpan.className = 'chip ok';
+        } else {
+          statusSpan.textContent = 'Disattivato';
+          statusSpan.className = 'chip';
+        }
+      }
+    }
+
     // === EVENT HANDLERS ===
     async function handleGeocode() {
       const query = document.getElementById('q').value.trim();
@@ -1049,7 +1468,7 @@
         if (mapMarker) mapMarker.setLatLng([result.lat, result.lon]);
         else mapMarker = L.marker([result.lat, result.lon]).addTo(map);
         
-        // NUOVO: Analisi automatica anche dopo geocoding
+        // Analisi automatica anche dopo geocoding
         setTimeout(() => handleAnalysis(), 500);
       } catch (error) {
         showNotification(error.message, 'error');
@@ -1088,19 +1507,28 @@
             const habitat = document.getElementById('habitat').value;
             const hours = parseInt(document.getElementById('hours').value);
 
-            debugLog('🚀 Starting hybrid weather analysis with:', { lat, lon, habitat, hours });
+            debugLog('🚀 Starting multi-species analysis with ERA5-Land:', { lat, lon, habitat, hours });
             const data = await getAnalysis(lat, lon, habitat, hours);
+            
+            // Salva dati per uso globale
+            currentSpeciesData = data;
             
             // Aggiornamenti UI
             updateKPIs(data);
             
-            // CHART FIX: Verifica esplicita presenza forecast - PASSA ANCHE I DATI PER ZONE ROSSE
-            if (data.forecast && Array.isArray(data.forecast) && data.forecast.length > 0) {
-              updateChart(data.forecast, data); // PASSA ANCHE data per calcolare zone rosse
+            // CHART: Gestisce sia forecasts multipli che singoli
+            if (data.species_forecasts && Object.keys(data.species_forecasts).length > 1) {
+              // Multi-specie: passa il forecast della specie dominante + tutti i dati
+              const dominantSpecies = data.species || Object.keys(data.species_forecasts)[0];
+              const dominantForecast = data.species_forecasts[dominantSpecies] || data.forecast;
+              updateChart(dominantForecast, data);
+            } else if (data.forecast && Array.isArray(data.forecast) && data.forecast.length > 0) {
+              // Specie singola: comportamento tradizionale
+              updateChart(data.forecast, data);
             } else {
               debugLog('❌ Forecast mancante o non valido:', data.forecast);
               document.getElementById('chart-error').style.display = 'block';
-              document.getElementById('chart-error').textContent = 'Dati previsione non ricevuti dal sistema ibrido';
+              document.getElementById('chart-error').textContent = 'Dati previsione non ricevuti dal sistema multi-specie';
             }
             
             updateWeatherTables(data);
@@ -1109,11 +1537,21 @@
             
             const weatherSources = data.weather_sources ? Object.keys(data.weather_sources).join(', ') : 'unknown';
             const weatherQuality = data.weather_quality_score ? data.weather_quality_score.toFixed(2) : '?';
+            const era5Status = data.era5_enabled ? 'con ERA5-Land' : 'senza ERA5-Land';
             
-            showNotification(`✅ Analisi BoletusLab completata: ${data.index}/100 per ${data.species || 'specie sconosciuta'} (qualità: ${weatherQuality}, fonti: ${weatherSources})`);
+            // Messaggio dinamico per multi-specie
+            let successMessage = '';
+            if (data.species_probabilities && Object.keys(data.species_probabilities).length > 1) {
+              const speciesList = Object.keys(data.species_probabilities).join(', ');
+              successMessage = `✅ Analisi Multi-Specie completata: ${data.index}/100 per coesistenza ${speciesList} (qualità: ${weatherQuality}, ${era5Status})`;
+            } else {
+              successMessage = `✅ Analisi BoletusLab completata: ${data.index}/100 per ${data.species || 'specie sconosciuta'} (qualità: ${weatherQuality}, ${era5Status})`;
+            }
+            
+            showNotification(successMessage);
 
         } catch (error) {
-            debugLog('❌ BoletusLab analysis failed:', error);
+            debugLog('❌ Multi-species analysis failed:', error);
             showNotification(error.message, 'error');
         } finally {
             setLoading(false);
@@ -1180,14 +1618,14 @@
     
     // === INIZIALIZZAZIONE ===
     document.addEventListener('DOMContentLoaded', function() {
-      debugLog('🔄 DOM loaded, initializing BoletusLab v2.5.7...');
+      debugLog('🔄 DOM loaded, initializing BoletusLab Multi-Species v2.5.7...');
       
       // Verifica librerie
       setTimeout(() => {
         if (!checkChartJS()) {
           showNotification('⚠️ Errore: Chart.js non caricato correttamente', 'error');
         } else {
-          debugLog('✅ All libraries loaded successfully for BoletusLab system');
+          debugLog('✅ All libraries loaded successfully for BoletusLab multi-species system');
         }
       }, 1000);
       
@@ -1210,7 +1648,7 @@
             mapMarker = L.marker(e.latlng).addTo(map);
           }
           
-          showNotification('🔬 Coordinate selezionate. Avvio analisi BoletusLab...', 'success');
+          showNotification('🔬 Coordinate selezionate. Avvio analisi multi-specie...', 'success');
           handleAnalysis();
         });
         
@@ -1231,6 +1669,26 @@
         }
       });
 
+      // === GESTIONE TOGGLE ERA5-LAND ===
+      document.getElementById('era5-toggle').addEventListener('change', function() {
+        const enabled = this.checked;
+        updateERA5Status(enabled);
+        
+        if (enabled) {
+          showNotification('🛰️ ERA5-Land attivato: dati satellitari umidità suolo inclusi', 'success');
+        } else {
+          showNotification('ERA5-Land disattivato: solo fonti meteo standard', 'warn');
+        }
+        
+        // Se abbiamo una posizione corrente, ri-esegui l'analisi
+        if (currentLocation.lat && currentLocation.lon) {
+          setTimeout(() => {
+            showNotification('Aggiornamento analisi con nuove fonti dati...', 'success');
+            handleAnalysis();
+          }, 1000);
+        }
+      });
+
       // Event listeners per i bottoni
       document.getElementById('btnGeo').addEventListener('click', handleGeocode);
       document.getElementById('btn-report-sighting').addEventListener('click', handleReportSighting);
@@ -1244,10 +1702,14 @@
       document.getElementById('lat').value = '43.3188';
       document.getElementById('lon').value = '11.3307';
       
+      // Inizializza stato ERA5
+      updateERA5Status(false);
+      
       // Carica statistiche validazione
       updateValidationStats();
       
-      debugLog('🎉 Initialization completed - BoletusLab v2.5.7 Sistema Previsionale Micologico ready!');
+      debugLog('🎉 Initialization completed - BoletusLab Multi-Species v2.5.7 Sistema Previsionale Micologico ready!');
     });
   </script>
 </body>
+</html>
