@@ -8,6 +8,8 @@
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
   
   <style>
+    #map{height:360px;border-radius:14px;overflow:hidden;border:1px solid #2a384b}
+
     :root{
       --bg:#0b0d10; --panel:#12161b; --muted:#8aa0b6; --text:#e6eef6;
       --accent:#62d5b4; --accent-2:#8bb7ff; --danger:#ff6b6b; --warn:#ffc857; --ok:#66e28a;
@@ -439,15 +441,7 @@
         <div class="metric"><div class="k">Range</div><div id="k-size-range" class="v">—</div></div>
         <div class="hr"></div>
         <div class="metric"><div class="k">Raccolto atteso</div><div id="k-harvest" class="v" style="font-size:18px">—</div></div>
-        <div class="muted" id="k-harvest-note"
-        <div id="terrain-card" class="panel" style="margin-top:12px;padding:10px;display:none">
-          <div style="display:flex;gap:12px;flex-wrap:wrap;font-size:14px">
-            <div>⛰️ <strong>Quota:</strong> <span id="t-elev">—</span> m</div>
-            <div>↗️ <strong>Pendenza:</strong> <span id="t-slope">—</span>°</div>
-            <div>🧭 <strong>Esposizione:</strong> <span id="t-aspect">—</span> <span id="t-aspect-src" class="muted"></span></div>
-          </div>
-        </div>
-     style="font-size:11px;margin-top:4px"></div>
+        <div class="muted" id="k-harvest-note" style="font-size:11px;margin-top:4px"></div>
       </div>
     </div>
 
@@ -583,7 +577,7 @@
 
   <script>
     // === GLOBAL STATE ===
-    const API_BASE = window.location.hostname === 'localhost' ? 'http://localhost:8787' : '';
+    const API_BASE = (window.location.hostname.includes('localhost') || window.location.hostname.includes('127.0.0.1')) ? 'http://localhost:8787' : 'https://porcinicast-v25.onrender.com';
     
     let currentChart = null;
     let currentLocation = { lat: null, lon: null };
@@ -599,17 +593,6 @@
       'pinophilus': '#8bb7ff',
       'mixed': '#ffc857'
     };
-
-    // Alias tassonomico per chiarezza in UI
-    function prettySpeciesName(sp){
-      const map = {
-        'reticulatus': 'B. reticulatus (= B. aestivalis)',
-        'aereus': 'B. aereus',
-        'edulis': 'B. edulis',
-        'pinophilus': 'B. pinophilus'
-      };
-      return map[sp] || ('B. ' + sp);
-    }
 
     // === DEBUG SYSTEM ===
     function debugLog(message, data = null) {
@@ -671,19 +654,20 @@
         const response = await fetch(`${API_BASE}/api/geocode?q=${encodeURIComponent(query)}`);
         if (!response.ok) throw new Error('Geocoding fallito');
         const result = await response.json();
-        debugLog('Geocoding result:', result);
-        
-        // Normalizzazione campi annidati per coerenza UI
-        try{
-          const sa = result.species_analysis || {};
-          result.primary_species = sa.primary_species || result.primary_species || result.species || null;
+        // Normalizza chiavi dalle nuove API (species_analysis -> top-level) per retro-compatibilità UI
+        if (result && result.species_analysis) {
+          const sa = result.species_analysis;
+          result.primary_species = sa.primary_species || result.primary_species || null;
           result.secondary_species = sa.secondary_species || result.secondary_species || null;
-          result.species_probabilities = sa.species_probabilities || result.species_probabilities || result.species_probs || {};
-          result.species_forecasts = sa.species_forecasts || result.species_forecasts || {};
-          result.species_lags = sa.species_lags || result.species_lags || {};
-          result.coexistence_scenario = sa.coexistence_scenario || result.coexistence_scenario || null;
-        }catch(e){}
-return result;
+          result.species = result.primary_species || result.species || null;
+          result.species_probabilities = result.species_probabilities || sa.species_probabilities || {};
+          result.species_forecasts = result.species_forecasts || sa.species_forecasts || {};
+          result.species_lags = result.species_lags || sa.species_lags || {};
+          result.coexistence_scenario = result.coexistence_scenario || sa.coexistence_scenario || null;
+        }
+
+        debugLog('Geocoding result:', result);
+        return result;
       } catch (error) {
         throw new Error(`Errore geocoding: ${error.message}`);
       }
@@ -726,6 +710,18 @@ return result;
             throw new Error(`HTTP ${response.status}: ${errData.detail || 'Errore sconosciuto'}`);
         }
         const result = await response.json();
+        // Normalizza chiavi dalle nuove API (species_analysis -> top-level) per retro-compatibilità UI
+        if (result && result.species_analysis) {
+          const sa = result.species_analysis;
+          result.primary_species = sa.primary_species || result.primary_species || null;
+          result.secondary_species = sa.secondary_species || result.secondary_species || null;
+          result.species = result.primary_species || result.species || null;
+          result.species_probabilities = result.species_probabilities || sa.species_probabilities || {};
+          result.species_forecasts = result.species_forecasts || sa.species_forecasts || {};
+          result.species_lags = result.species_lags || sa.species_lags || {};
+          result.coexistence_scenario = result.coexistence_scenario || sa.coexistence_scenario || null;
+        }
+
         debugLog('Multi-species analysis result:', {
           hasIndex: !!result.index,
           hasForecast: Array.isArray(result.forecast),
@@ -812,16 +808,6 @@ return result;
         }
 
         document.getElementById('k-harvest').textContent = data.harvest_estimate || '—';
-        try{
-          document.getElementById('t-elev').textContent = (data.elevation_m!=null)? Math.round(data.elevation_m): '—';
-          document.getElementById('t-slope').textContent = (data.slope_deg!=null)? Number(data.slope_deg).toFixed(1): '—';
-          const asp = data.aspect_octant || (data.aspect_deg!=null? (data.aspect_deg+'°') : '—');
-          const src = data.aspect_source ? `(${data.aspect_source})` : '';
-          document.getElementById('t-aspect').textContent = asp;
-          document.getElementById('t-aspect-src').textContent = src;
-          document.getElementById('terrain-card').style.display = 'block';
-        }catch(e){}
-    
         document.getElementById('k-harvest-note').textContent = data.harvest_note || '';
         document.getElementById('k-size').textContent = data.size_cm ? `${data.size_cm} cm` : '—';
         document.getElementById('k-size-range').textContent = data.size_range_cm ? 
@@ -835,7 +821,16 @@ return result;
         
         // NUOVO: Mostra qualità e fonti weather del sistema ibrido + ERA5
         if (data.weather_quality_score !== undefined) {
-      or}">${data.weather_quality_score.toFixed(2)}</span>/1.00<br>
+          const qualityDiv = document.getElementById('cumulative-moisture-value');
+          if (qualityDiv) {
+            const weatherSources = data.weather_sources || {};
+            const vcDays = weatherSources.visual_crossing_days || 0;
+            const omDays = weatherSources.open_meteo_past_days || 0;
+            const era5Status = data.era5_enabled ? 'Attivo' : 'Disattivo';
+            const qualityColor = data.weather_quality_score >= 0.8 ? '#66e28a' : data.weather_quality_score >= 0.6 ? '#ffc857' : '#ff6b6b';
+            
+            qualityDiv.innerHTML = `
+              <strong>Qualità Weather Multi-Fonte:</strong> <span style="color:${qualityColor}">${data.weather_quality_score.toFixed(2)}</span>/1.00<br>
               <strong>Fonti:</strong> Visual Crossing (${vcDays}d) + Open-Meteo (${omDays}d) + ERA5-Land (${era5Status})<br>
               <strong>Umidità Cumulativa:</strong> ${data.cumulative_moisture_index?.toFixed(1) || 0} mm
             `;
@@ -859,11 +854,11 @@ return result;
         if (data.species_probabilities && Object.keys(data.species_probabilities).length > 1) {
           const sorted = Object.entries(data.species_probabilities)
             .sort((a, b) => b[1] - a[1])
-            .filter(([species, prob]) => prob >= 0.05); // Solo specie significative
+            .filter(([species, prob]) => prob > 0.1); // Solo specie significative
 
           if (sorted.length > 1) {
             const speciesText = sorted.map(([species, prob]) => 
-              `<em>${prettySpeciesName(species)}</em> (${Math.round(prob * 100)}%)`
+              `<em>B. ${species}</em> (${Math.round(prob * 100)}%)`
             ).join(' + ');
             speciesDiv.innerHTML = `<strong>Coesistenza:</strong> ${speciesText}`;
             
@@ -874,8 +869,8 @@ return result;
         }
 
         // Specie singola dominante
-        const species = data.primary_species || 'reticulatus';
-        speciesDiv.innerHTML = `<strong>Specie dominante:</strong> <em>${prettySpeciesName(species)}</em>`;
+        const species = data.species || 'reticulatus';
+        speciesDiv.innerHTML = `<strong>Specie dominante:</strong> <em>Boletus ${species}</em>`;
         
         // Nascondi legenda per specie singola
         document.getElementById('species-legend').style.display = 'none';
@@ -901,7 +896,7 @@ return result;
           html += `
             <div class="species-legend-item">
               <div class="species-color-dot" style="background-color: ${color}"></div>
-              <span><em>${prettySpeciesName(species)}</em></span>
+              <span><em>B. ${species}</em></span>
               <span class="species-probability">${percentage}%</span>
             </div>
           `;
@@ -952,18 +947,15 @@ return result;
           // CURVE MULTIPLE SOVRAPPOSTE
           const speciesProbabilities = data.species_probabilities || {};
           
-          Object.entries(Object.fromEntries(Object.entries(data.species_forecasts)
-  .sort((a,b)=> (data.species_probabilities[b[0]]||0) - (data.species_probabilities[a[0]]||0))
-  .slice(0, Math.min(2, Object.keys(data.species_forecasts).length))))
-.forEach(([species, speciesForecast]) => {
+          Object.entries(data.species_forecasts).forEach(([species, speciesForecast]) => {
             const probability = speciesProbabilities[species] || 0;
-            if (probability < 0.05) return; // Skip specie con probabilità troppo bassa
+            if (probability < 0.1) return; // Skip specie con probabilità troppo bassa
             
             const color = SPECIES_COLORS[species] || SPECIES_COLORS.mixed;
             const alpha = 0.4 + (probability * 0.6); // Trasparenza basata su probabilità
             
             datasets.push({
-              label: `🍄 ${prettySpeciesName(species)} (${Math.round(probability * 100)}%)`,
+              label: `🍄 B. ${species} (${Math.round(probability * 100)}%)`,
               data: speciesForecast,
               borderColor: color,
               backgroundColor: color + Math.floor(alpha * 255).toString(16).padStart(2, '0'),
@@ -987,7 +979,7 @@ return result;
           
         } else {
           // CURVA SINGOLA (sistema tradizionale)
-          const species = data?.primary_species || 'reticulatus';
+          const species = data?.species || 'reticulatus';
           const color = SPECIES_COLORS[species] || SPECIES_COLORS.mixed;
           
           // CALCOLA ZONE ROSSE DI FRUTTIFICAZIONE per specie singola
@@ -1013,7 +1005,7 @@ return result;
           
           // Dataset principale
           datasets.push({
-            label: `🍄 ${prettySpeciesName(species)} (Dominante)`,
+            label: `🍄 B. ${species} (Dominante)`,
             data: forecast,
             borderColor: color,
             backgroundColor: color + '26',
@@ -1142,48 +1134,6 @@ return result;
             }
           }
         });
-        
-        // Mini-tooltip: raccolto atteso ~kg sul punto cliccato
-        (function(){
-          try{
-            const tipId = 'chart-mini-tip';
-            let tip = document.getElementById(tipId);
-            if (!tip){
-              tip = document.createElement('div');
-              tip.id = tipId;
-              tip.style.position='absolute';
-              tip.style.pointerEvents='none';
-              tip.style.fontSize='12px';
-              tip.style.background='rgba(0,0,0,0.80)';
-              tip.style.border='1px solid #2a384b';
-              tip.style.borderRadius='8px';
-              tip.style.padding='6px 8px';
-              tip.style.color='#e6eef6';
-              tip.style.zIndex='10';
-              const cont = document.getElementById('chart-container');
-              cont.style.position='relative';
-              cont.appendChild(tip);
-            }
-            const canvas = document.getElementById('forecastChart');
-            canvas.onclick = (ev)=>{
-              if (!currentChart) return;
-              const pts = currentChart.getElementsAtEventForMode(ev, 'nearest', {intersect:true}, true);
-              if (!pts || !pts.length){ tip.style.display='none'; return; }
-              const p = pts[0];
-              const idxp = p.index;
-              const rect = canvas.getBoundingClientRect();
-              const x = ev.clientX - rect.left + 8;
-              const y = ev.clientY - rect.top - 10;
-              const total = forecast.reduce((s,v)=>s+(v||0), 0) || 1;
-              const overall = (data && data.harvest_estimate) ? Number(data.harvest_estimate) : 0;
-              const expectedKg = overall ? (forecast[idxp] / total) * overall : (forecast[idxp] / 100) * 2.0;
-              const dayLabel = currentChart.data.labels[idxp] || ('Giorno ' + (idxp+1));
-              tip.innerHTML = `<strong>${dayLabel}</strong><br/>Indice: ${Math.round(forecast[idxp])} / 100<br/>Raccolto atteso: ~ ${expectedKg.toFixed(1)} kg`;
-              tip.style.left = x + 'px'; tip.style.top = y + 'px'; tip.style.display='block';
-            };
-          }catch(e){}
-        })();
-
         
         // Nascondi messaggio errore
         document.getElementById('chart-error').style.display = 'none';
@@ -1377,7 +1327,7 @@ return result;
 
       const sorted = Object.entries(data.species_probabilities)
         .sort((a, b) => b[1] - a[1])
-        .filter(([species, prob]) => prob >= 0.05);
+        .filter(([species, prob]) => prob > 0.1);
 
       if (sorted.length <= 1) return '';
 
@@ -1415,7 +1365,7 @@ return result;
     }
 
     function buildPracticalAdvice(data) {
-      const species = data.primary_species || 'reticulatus';
+      const species = data.species || 'reticulatus';
       const index = data.index || 0;
       const bestWindow = data.best_window;
       const elevation = data.elevation_m || 800;
@@ -1708,20 +1658,35 @@ return result;
       try {
         // Inizializzazione Mappa Leaflet
         map = L.map('map').setView([42.5, 12.5], 6);
-        
         const esri = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
-          attribution: 'Tiles &copy; Esri'
-        }).addTo(map);
-        esri.on('tileerror', function(){
-          try{
-            map.removeLayer(esri);
-          }catch(e){}
-          L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-            attribution: '&copy; OpenStreetMap contributors',
-            maxZoom: 19
-          }).addTo(map);
+          attribution: 'Tiles &copy; Esri — Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, and the GIS User Community'
         });
+        esri.on('tileerror', function(){
+          if (!window.__osm_fallback_loaded){
+            window.__osm_fallback_loaded = true;
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+              maxZoom: 19,
+              attribution: '&copy; OpenStreetMap contributors'
+            }).addTo(map);
+          }
+        });
+        esri.addTo(map);
 
+        // Event listener per il click sulla mappa
+        map.on('click', function(e) {
+          const { lat, lng } = e.latlng;
+          document.getElementById('lat').value = lat.toFixed(4);
+          document.getElementById('lon').value = lng.toFixed(4);
+          
+          if (mapMarker) {
+            mapMarker.setLatLng(e.latlng);
+          } else {
+            mapMarker = L.marker(e.latlng).addTo(map);
+          }
+          
+          showNotification('🔬 Coordinate selezionate. Avvio analisi multi-specie...', 'success');
+          handleAnalysis();
+        });
         
         debugLog('✅ Map initialized successfully');
       } catch (error) {
