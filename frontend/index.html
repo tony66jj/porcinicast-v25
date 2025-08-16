@@ -331,7 +331,7 @@
       <h3>🌧️ Dati Meteorologici Completi e Eventi Piovosi</h3>
       <div class="grid g2">
         <div>
-          <h4>📊 Ultimi 15 giorni (Pioggia + Temperature)</h4>
+          <h4>📊 Ultimi 20 giorni (Pioggia + Temperature)</h4>
           <div id="rain-past-table">
             <p class="muted">In attesa di analisi...</p>
           </div>
@@ -683,7 +683,7 @@
         // CALCOLA ZONE ROSSE DI FRUTTIFICAZIONE
         let fruitingZones = [];
         if (data && data.flush_events) {
-          const pastDays = 15; // Come nel backend
+          const pastDays = 20; // Come nel backend
           data.flush_events.forEach(event => {
             if (!event.observed) { // Solo eventi futuri
               const eventIdx = event.event_day_index;
@@ -857,7 +857,7 @@
           Object.entries(data.weather_past)
             .sort((a,b) => new Date(a[0]) - new Date(b[0]))
             .reverse()
-            .slice(0, 15)
+            .slice(0, 20)
             .forEach(([date, weather]) => {
               html += `<tr>
                 <td>${formatDate(date)}</td>
@@ -909,7 +909,7 @@
         const pastTable = document.getElementById('rain-past-table');
         if (data.rain_past && Object.keys(data.rain_past).length > 0) {
           let html = '<table><tr><th>Data</th><th>Pioggia (mm)</th></tr>';
-          Object.entries(data.rain_past).sort((a,b)=>new Date(a[0]) - new Date(b[0])).reverse().slice(0, 15).forEach(([date, mm]) => {
+          Object.entries(data.rain_past).sort((a,b)=>new Date(a[0]) - new Date(b[0])).reverse().slice(0, 20).forEach(([date, mm]) => {
             html += `<tr><td>${formatDate(date)}</td><td>${mm}</td></tr>`;
           });
           html += '</table>';
