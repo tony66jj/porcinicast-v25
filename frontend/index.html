@@ -164,6 +164,15 @@
       font-weight: 600;
     }
     
+    .openmeteo-badge {
+      background: linear-gradient(45deg, #4CAF50, #2E7D32);
+      color: white;
+      padding: 3px 8px;
+      border-radius: 12px;
+      font-size: 11px;
+      font-weight: 600;
+    }
+    
     @media (max-width: 768px) {
       .controls{grid-template-columns:1fr;gap:8px}
       .grid.g3{grid-template-columns:1fr}
@@ -181,6 +190,7 @@
     <header>
       <h1>🍄 BoletusLab® – Sistema Previsionale Micologico</h1>
       <span class="badge version-badge">v2.5.7</span>
+      <span class="badge openmeteo-badge">OpenMeteo Archive+Forecast</span>
       <span class="badge scientific-badge">Algoritmi Scientifici Boletus spp.</span>
       <span class="badge">Previsione Fruttificazione</span>
     </header>
@@ -307,7 +317,7 @@
     <div class="panel section">
       <h3>📈 Previsione Prossimi 10 Giorni (Step-Function Scientifica)</h3>
       <div style="margin-bottom:8px;color:var(--muted);font-size:12px;">
-        ✨ <strong>BoletusLab v2.5.7:</strong> Lag specie-specifico • Umidità cumulativa • Esposizione corretta • Algoritmi scientifici Boletus spp.
+        ✨ <strong>BoletusLab v2.5.7:</strong> OpenMeteo Archive (20d) + Forecast (10d) • Lag specie-specifico • Umidità cumulativa • Esposizione corretta • Algoritmi scientifici Boletus spp.
       </div>
       <div class="lag-explanation" id="lag-explanation" style="display:none;">
         💡 <strong>Fruttificazione Step-Function:</strong> Basato su letteratura scientifica - i funghi appaiono improvvisamente "tutto o niente" dopo lag biologico specie-specifico.
@@ -323,15 +333,15 @@
     <div class="panel section">
       <h3>🧭 Analisi Scientifica Dettagliata v2.5.7</h3>
       <div id="field-analysis" class="field-analysis">
-        <p class="muted">Esegui un'analisi per vedere i dettagli scientifici con algoritmi BoletusLab.</p>
+        <p class="muted">Esegui un'analisi per vedere i dettagli scientifici con algoritmi BoletusLab e sistema OpenMeteo Archive+Forecast.</p>
       </div>
     </div>
 
     <div class="panel section">
-      <h3>🌧️ Dati Meteorologici Completi e Eventi Piovosi</h3>
+      <h3>🌧️ Dati Meteorologici OpenMeteo Archive+Forecast ed Eventi Piovosi</h3>
       <div class="grid g2">
         <div>
-          <h4>📊 Ultimi 15 giorni (Pioggia + Temperature)</h4>
+          <h4>📊 Ultimi 20 giorni (Pioggia + Temperature)</h4>
           <div id="rain-past-table">
             <p class="muted">In attesa di analisi...</p>
           </div>
@@ -349,7 +359,7 @@
           <p class="muted">In attesa di analisi...</p>
         </div>
         <div id="cumulative-moisture-info" style="margin-top:12px;">
-          <h4>🌊 Sistema Meteorologico Ibrido v2.5.7</h4>
+          <h4>🌊 Sistema Meteorologico OpenMeteo Completo v2.5.7</h4>
           <div id="cumulative-moisture-value" class="muted">In attesa di calcolo qualità weather...</div>
         </div>
       </div>
@@ -414,7 +424,7 @@
     
 <footer>
   <p>🍄 <strong>BoletusLab® v2.5.7</strong> – Sistema previsionale micologico per fruttificazione <em>Boletus</em> spp.</p>
-  <p><strong>Tecnologie:</strong> Sistema meteorologico ibrido Visual Crossing + Open-Meteo • Lag biologico specie-specifico • Umidità cumulativa • Step-function fruttificazione</p>
+  <p><strong>Tecnologie:</strong> Sistema meteorologico OpenMeteo Archive (20d) + Forecast (10d) • Visual Crossing backup • Lag biologico specie-specifico • Umidità cumulativa • Step-function fruttificazione</p>
   <p><strong>Base scientifica:</strong> Mumcu Küçüker (2019), Martínez-Peña et al. (2012), Parladé et al. (2017), Tahvanainen et al. (2016), de la Varga et al. (2013)</p>
   <p><strong>Sviluppato da Antonio Pio D'Aloia</strong> • FastAPI • NumPy/SciPy • SQLite • Docker • Machine Learning • Leaflet.js</p>
   <p><small>BoletusLab® è un marchio registrato. Tutti i diritti riservati.</small></p>
@@ -506,7 +516,7 @@
 
     async function getAnalysis(lat, lon, habitat = '', hours = 4) {
       try {
-        debugLog('Starting hybrid weather analysis:', { lat, lon, habitat, hours });
+        debugLog('Starting OpenMeteo Archive+Forecast analysis:', { lat, lon, habitat, hours });
         const params = new URLSearchParams({
           lat: lat.toString(),
           lon: lon.toString(),
@@ -533,7 +543,7 @@
             throw new Error(`HTTP ${response.status}: ${errData.detail || 'Errore sconosciuto'}`);
         }
         const result = await response.json();
-        debugLog('Hybrid weather analysis result:', {
+        debugLog('OpenMeteo Archive+Forecast analysis result:', {
           hasIndex: !!result.index,
           hasForecast: Array.isArray(result.forecast),
           forecastLength: result.forecast?.length,
@@ -542,12 +552,15 @@
           hasSpeciesLag: !!result.species,
           hasCumulativeMoisture: !!result.cumulative_moisture_index,
           weatherQuality: result.weather_quality_score,
-          weatherSources: result.weather_sources
+          weatherSources: result.weather_sources,
+          primarySource: result.weather_sources?.primary_source,
+          backupUsed: result.weather_sources?.backup_used,
+          historicalDays: result.diagnostics?.historical_days || 20
         });
         return result;
       } catch (error) {
-        debugLog('Hybrid weather analysis error:', error);
-        throw new Error(`Errore analisi sistema ibrido: ${error.message}`);
+        debugLog('OpenMeteo Archive+Forecast analysis error:', error);
+        throw new Error(`Errore analisi sistema OpenMeteo Archive+Forecast: ${error.message}`);
       }
     }
 
@@ -594,7 +607,7 @@
 
     // === UI UPDATES ===
     function updateKPIs(data) {
-      debugLog('Updating KPIs hybrid weather:', data);
+      debugLog('Updating KPIs OpenMeteo Archive+Forecast:', data);
       
       try {
         document.getElementById('k-index').textContent = `${data.index}/100`;
@@ -625,25 +638,38 @@
         const hasValidations = data.has_local_validations ? 'Sì' : 'No';
         document.getElementById('k-has-validations').textContent = `validazioni: ${hasValidations}`;
         
-        // NUOVO: Mostra qualità e fonti weather del sistema ibrido
+        // NUOVO: Mostra qualità e fonti weather del sistema OpenMeteo completo
         if (data.weather_quality_score !== undefined) {
           const qualityDiv = document.getElementById('cumulative-moisture-value');
           if (qualityDiv) {
             const weatherSources = data.weather_sources || {};
-            const vcDays = weatherSources.visual_crossing_days || 0;
-            const omDays = weatherSources.open_meteo_past_days || 0;
-            const qualityColor = data.weather_quality_score >= 0.8 ? '#66e28a' : data.weather_quality_score >= 0.6 ? '#ffc857' : '#ff6b6b';
+            const primarySource = weatherSources.primary_source || "unknown";
+            const backupUsed = weatherSources.backup_used || false;
+            const qualityColor = data.weather_quality_score >= 0.9 ? '#66e28a' : data.weather_quality_score >= 0.7 ? '#ffc857' : '#ff6b6b';
+            const historicalDays = data.diagnostics?.historical_days || 20;
+            
+            let sourceText = "";
+            if (backupUsed) {
+              const vcHistDays = weatherSources.visual_crossing_historical_days || 0;
+              const vcForecastDays = weatherSources.visual_crossing_forecast_days || 0;
+              sourceText = `Visual Crossing backup (${vcHistDays}d storici + ${vcForecastDays}d forecast)`;
+            } else {
+              const archiveDays = weatherSources.archive_days || historicalDays;
+              const forecastDays = weatherSources.forecast_days || 10;
+              sourceText = `OpenMeteo Archive (${archiveDays}d) + Forecast (${forecastDays}d)`;
+            }
             
             qualityDiv.innerHTML = `
-              <strong>Qualità Weather Ibrida:</strong> <span style="color:${qualityColor}">${data.weather_quality_score.toFixed(2)}</span>/1.00<br>
-              <strong>Fonti:</strong> Visual Crossing (${vcDays}d) + Open-Meteo (${omDays}d)<br>
-              <strong>Umidità Cumulativa:</strong> ${data.cumulative_moisture_index.toFixed(1)} mm
+              <strong>Qualità Weather Completo:</strong> <span style="color:${qualityColor}">${data.weather_quality_score.toFixed(3)}</span>/1.000<br>
+              <strong>Fonte:</strong> ${sourceText}<br>
+              <strong>Umidità Cumulativa:</strong> ${data.cumulative_moisture_index.toFixed(1)} mm<br>
+              <strong>P20 totale:</strong> ${data.P20_mm || data.P15_mm || 0} mm (${historicalDays} giorni)
             `;
-            qualityDiv.className = data.weather_quality_score >= 0.8 ? 'chip ok' : data.weather_quality_score >= 0.6 ? 'chip warn' : 'chip bad';
+            qualityDiv.className = data.weather_quality_score >= 0.9 ? 'chip ok' : data.weather_quality_score >= 0.7 ? 'chip warn' : 'chip bad';
           }
         }
         
-        debugLog('KPIs updated successfully with hybrid weather system');
+        debugLog('KPIs updated successfully with OpenMeteo Archive+Forecast system');
       } catch (error) {
         debugLog('Error updating KPIs:', error);
         showNotification('Errore aggiornamento KPI', 'error');
@@ -651,7 +677,7 @@
     }
 
     function updateChart(forecast, data = null) {
-      debugLog('Updating chart with hybrid weather forecast:', forecast);
+      debugLog('Updating chart with OpenMeteo primary forecast:', forecast);
       
       if (!checkChartJS()) {
         return;
@@ -662,7 +688,7 @@
         if (!Array.isArray(forecast) || forecast.length === 0) {
           debugLog('❌ Forecast non valido:', forecast);
           document.getElementById('chart-error').style.display = 'block';
-          document.getElementById('chart-error').textContent = 'Dati previsione non disponibili dal sistema ibrido';
+          document.getElementById('chart-error').textContent = 'Dati previsione non disponibili dal sistema OpenMeteo primario';
           return;
         }
         
@@ -703,7 +729,7 @@
         
         // DATASET PRINCIPALE
         const datasets = [{
-          label: 'Indice Fruttificazione (Sistema Ibrido)',
+          label: 'Indice Fruttificazione (OpenMeteo Primario)',
           data: forecast,
           borderColor: '#62d5b4',
           backgroundColor: 'rgba(98, 213, 180, 0.15)',
@@ -835,12 +861,12 @@
         
         // Nascondi messaggio errore
         document.getElementById('chart-error').style.display = 'none';
-        debugLog('✅ Hybrid weather chart created successfully with', forecast.length, 'data points and', fruitingZones.length, 'fruiting zones');
+        debugLog('✅ OpenMeteo primary chart created successfully with', forecast.length, 'data points and', fruitingZones.length, 'fruiting zones');
         
       } catch (error) {
-        debugLog('❌ Error creating hybrid weather chart:', error);
+        debugLog('❌ Error creating OpenMeteo primary chart:', error);
         document.getElementById('chart-error').style.display = 'block';
-        document.getElementById('chart-error').textContent = `Errore grafico sistema ibrido: ${error.message}`;
+        document.getElementById('chart-error').textContent = `Errore grafico sistema OpenMeteo primario: ${error.message}`;
       }
     }
 
@@ -937,7 +963,7 @@
     }
 
     function updateFlushEvents(data) {
-      debugLog('Updating flush events hybrid weather:', {
+      debugLog('Updating flush events OpenMeteo primary:', {
         hasEvents: Array.isArray(data.flush_events),
         eventCount: data.flush_events?.length || 0
       });
@@ -986,7 +1012,7 @@
     }
 
     function updateFieldAnalysis(data) {
-      debugLog('Updating field analysis hybrid weather:', {
+      debugLog('Updating field analysis OpenMeteo primary:', {
         hasExplanation: !!data.dynamic_explanation,
         explanationLength: data.dynamic_explanation?.length || 0
       });
@@ -999,7 +1025,7 @@
           analysisDiv.innerHTML = '<p class="muted">Analisi scientifica dettagliata non disponibile per questa località</p>';
         }
         
-        debugLog('✅ Field analysis updated successfully with hybrid weather data');
+        debugLog('✅ Field analysis updated successfully with OpenMeteo primary data');
       } catch (error) {
         debugLog('❌ Error updating field analysis:', error);
       }
@@ -1088,7 +1114,7 @@
             const habitat = document.getElementById('habitat').value;
             const hours = parseInt(document.getElementById('hours').value);
 
-            debugLog('🚀 Starting hybrid weather analysis with:', { lat, lon, habitat, hours });
+            debugLog('🚀 Starting OpenMeteo primary analysis with:', { lat, lon, habitat, hours });
             const data = await getAnalysis(lat, lon, habitat, hours);
             
             // Aggiornamenti UI
@@ -1100,20 +1126,22 @@
             } else {
               debugLog('❌ Forecast mancante o non valido:', data.forecast);
               document.getElementById('chart-error').style.display = 'block';
-              document.getElementById('chart-error').textContent = 'Dati previsione non ricevuti dal sistema ibrido';
+              document.getElementById('chart-error').textContent = 'Dati previsione non ricevuti dal sistema OpenMeteo primario';
             }
             
             updateWeatherTables(data);
             updateFlushEvents(data);
             updateFieldAnalysis(data);
             
-            const weatherSources = data.weather_sources ? Object.keys(data.weather_sources).join(', ') : 'unknown';
+            const weatherSources = data.weather_sources || {};
+            const primarySource = weatherSources.primary_source || 'unknown';
+            const backupUsed = weatherSources.backup_used ? '(backup attivo)' : '(primario)';
             const weatherQuality = data.weather_quality_score ? data.weather_quality_score.toFixed(2) : '?';
             
-            showNotification(`✅ Analisi BoletusLab completata: ${data.index}/100 per ${data.species || 'specie sconosciuta'} (qualità: ${weatherQuality}, fonti: ${weatherSources})`);
+            showNotification(`✅ Analisi BoletusLab completata: ${data.index}/100 per ${data.species || 'specie sconosciuta'} (qualità: ${weatherQuality}, fonte: ${primarySource} ${backupUsed})`);
 
         } catch (error) {
-            debugLog('❌ BoletusLab analysis failed:', error);
+            debugLog('❌ BoletusLab OpenMeteo primary analysis failed:', error);
             showNotification(error.message, 'error');
         } finally {
             setLoading(false);
@@ -1180,14 +1208,14 @@
     
     // === INIZIALIZZAZIONE ===
     document.addEventListener('DOMContentLoaded', function() {
-      debugLog('🔄 DOM loaded, initializing BoletusLab v2.5.7...');
+      debugLog('🔄 DOM loaded, initializing BoletusLab v2.5.7 with OpenMeteo Primary...');
       
       // Verifica librerie
       setTimeout(() => {
         if (!checkChartJS()) {
           showNotification('⚠️ Errore: Chart.js non caricato correttamente', 'error');
         } else {
-          debugLog('✅ All libraries loaded successfully for BoletusLab system');
+          debugLog('✅ All libraries loaded successfully for BoletusLab OpenMeteo primary system');
         }
       }, 1000);
       
@@ -1210,7 +1238,7 @@
             mapMarker = L.marker(e.latlng).addTo(map);
           }
           
-          showNotification('🔬 Coordinate selezionate. Avvio analisi BoletusLab...', 'success');
+          showNotification('🔬 Coordinate selezionate. Avvio analisi BoletusLab OpenMeteo primario...', 'success');
           handleAnalysis();
         });
         
@@ -1247,7 +1275,8 @@
       // Carica statistiche validazione
       updateValidationStats();
       
-      debugLog('🎉 Initialization completed - BoletusLab v2.5.7 Sistema Previsionale Micologico ready!');
+      debugLog('🎉 Initialization completed - BoletusLab v2.5.7 Sistema Previsionale Micologico con OpenMeteo Primario ready!');
     });
   </script>
 </body>
+</html>
