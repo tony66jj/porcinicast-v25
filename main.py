@@ -333,8 +333,7 @@ def dynamic_rain_threshold_v30(smi: float, month: int, elevation: float,
     elif cumulative_moisture > 5.0: moisture_factor = 0.95
     else: moisture_factor = 1.1
     
-    final_threshold = (base_threshold * smi_factor * et_factor * 
-                      alt_factor * lat_factor * temp_factor * moisture_factor)
+    final_threshold = (base_threshold * smi_factor * et_factor * alt_factor * lat_factor * temp_factor * moisture_factor)
     return clamp(final_threshold, 3.0, 20.0)
 
 # ===== SMOOTHING SAVITZKY-GOLAY =====
@@ -577,67 +576,85 @@ SPECIES_PROFILES_V30 = {
     }
 }
 
-# ===== SISTEMA DI COESISTENZA SCIENTIFICAMENTE BASATO =====
+# ===== SISTEMA DI COESISTENZA SCIENTIFICAMENTE BASATO (MODIFICATO) =====
 def calculate_species_probabilities(habitat_used: str, month: int, elev_m: float, 
                                    aspect_oct: Optional[str], lat: float) -> Dict[str, float]:
     """
-    Calcola probabilità di coesistenza basato su letteratura Borgotaro e studi europei
+    Calcola probabilità di coesistenza con regole di habitat più rigide come richiesto.
+    - Faggio: solo edulis o reticulatus.
+    - Quercia: solo aereus.
+    - Conifere: solo pinophilus.
+    - Castagno/Misto: logica più flessibile.
     """
-    scores = {}
+    scores = { "aereus": 0.0, "reticulatus": 0.0, "edulis": 0.0, "pinophilus": 0.0 }
     h = (habitat_used or "misto").lower()
-    
-    for species, profile in SPECIES_PROFILES_V30.items():
-        if h not in profile["hosts"]:
-            scores[species] = 0.0
-            continue
-            
-        score = 1.0
+
+    if h == "faggio":
+        # Nelle faggete, solo edulis o reticulatus.
+        # Li distinguiamo in base a stagione e altitudine per una stima più accurata.
+        score_edulis = 1.0
+        score_reticulatus = 1.0
         
-        # Scoring stagionale più sfumato
-        if month in profile["season"]["peak_m"]:
-            score *= 1.5
-        elif profile["season"]["start_m"] <= month <= profile["season"]["end_m"]:
-            score *= 1.0
-        else:
-            score *= 0.2  # Non completamente escluso
+        # B. edulis è tipicamente più tardivo (autunnale) e di alta quota.
+        if month >= 9: score_edulis *= 1.5
+        if elev_m > 1100: score_edulis *= 1.5
         
-        # Scoring elevazione più graduale
-        elev_min, elev_max = profile["elevation_opt"]
-        if elev_min <= elev_m <= elev_max:
-            score *= 1.2
-        else:
-            # Penalità graduale invece di esclusione
-            if elev_m < elev_min:
-                penalty = max(0.3, 1.0 - (elev_min - elev_m) / 500.0)
-            else:
-                penalty = max(0.3, 1.0 - (elev_m - elev_max) / 800.0)
-            score *= penalty
+        # B. reticulatus (aestivalis) è più precoce (estivo) e comune a quote inferiori nella faggeta.
+        if month < 9: score_reticulatus *= 1.5
+        if elev_m <= 1100: score_reticulatus *= 1.5
         
-        # Fattore geografico
-        if species == "aereus" and lat < 43.0: score *= 1.3
-        elif species == "edulis" and lat > 45.0: score *= 1.15
-        elif species == "reticulatus" and 41.0 <= lat <= 44.0: score *= 1.1
+        scores["edulis"] = score_edulis
+        scores["reticulatus"] = score_reticulatus
+
+    elif h == "quercia":
+        # Nelle querce, l'unica specie ecologicamente corretta è B. aereus.
+        scores["aereus"] = 1.0
         
-        # Fattore esposizione
-        if aspect_oct:
-            if species in ["aereus", "reticulatus"] and aspect_oct in ["S", "SE", "SW"]:
-                score *= 1.1
-            elif species in ["edulis", "pinophilus"] and aspect_oct in ["N", "NE", "NW"]:
-                score *= 1.1
+    elif h in ["conifere", "pino"]:
+        # Nelle conifere, la specie simbionte è B. pinophilus.
+        scores["pinophilus"] = 1.0
         
-        scores[species] = score
-    
-    # Normalizza in probabilità
+    elif h == "castagno":
+        # Nei castagneti sono comuni specie termofile come reticulatus e aereus.
+        scores["reticulatus"] = 1.0
+        scores["aereus"] = 0.7  # Spesso presente ma con B. reticulatus come dominante.
+        
+    else:  # 'misto' o altri habitat non specificati
+        # Per i boschi misti, usiamo una logica flessibile che considera più fattori.
+        # B. aereus (termofilo)
+        if "quercia" in h or "castagno" in h or h == "misto":
+            scores["aereus"] = 1.0 if 6 <= month <= 9 and elev_m < 1000 else 0.1
+        # B. reticulatus (estivo)
+        if "faggio" in h or "quercia" in h or "castagno" in h or h == "misto":
+            scores["reticulatus"] = 1.0 if 5 <= month <= 9 else 0.2
+        # B. edulis (autunnale, montano)
+        if "faggio" in h or "conifere" in h or h == "misto":
+            scores["edulis"] = 1.0 if 8 <= month <= 11 and elev_m > 800 else 0.2
+        # B. pinophilus (legato alle conifere)
+        if "conifere" in h or "pino" in h or h == "misto":
+            scores["pinophilus"] = 0.9 if elev_m > 700 else 0.1
+
+    # Normalizza i punteggi per ottenere le probabilità
     total = sum(scores.values())
     if total > 0:
-        probabilities = {species: score/total for species, score in scores.items()}
+        probabilities = {species: score / total for species, score in scores.items()}
     else:
-        probabilities = {"reticulatus": 1.0}
+        # Fallback nel caso nessun punteggio sia > 0
+        return {"reticulatus": 1.0}
     
-    # Filtra specie con probabilità significativa (>5%)
+    # Filtra le specie con probabilità significativa per evitare rumore nel grafico
     significant_species = {k: v for k, v in probabilities.items() if v > 0.05}
     
-    return significant_species if significant_species else {"reticulatus": 1.0}
+    # Se il filtro rimuove tutte le specie, ripristina la più probabile come fallback
+    if not significant_species:
+        if probabilities:
+            most_probable = max(probabilities, key=probabilities.get)
+            return {most_probable: 1.0}
+        else:
+            return {"reticulatus": 1.0} # Fallback definitivo
+        
+    return significant_species
+
 
 def determine_coexistence_scenario(species_probabilities: Dict[str, float]) -> str:
     """
@@ -645,6 +662,8 @@ def determine_coexistence_scenario(species_probabilities: Dict[str, float]) -> s
     """
     sorted_species = sorted(species_probabilities.items(), key=lambda x: x[1], reverse=True)
     
+    if not sorted_species:
+        return "dominanza_netta"
     if len(sorted_species) == 1:
         return "dominanza_netta"
     elif len(sorted_species) == 2 and sorted_species[1][1] > 0.25:
@@ -1514,7 +1533,7 @@ async def api_score_multi_species(
     aspect: str = Query("", description="Esposizione manuale"),
     autoaspect: int = Query(1, description="1=automatico DEM"),
     advanced_lag: int = Query(0, description="1=lag biologico avanzato"),
-    enable_era5: int = Query(0, description="1=abilita ERA5-Land"),
+    use_era5: int = Query(0, description="1=abilita ERA5-Land"), # Modificato per coerenza
     background_tasks: BackgroundTasks = None
 ):
     """
@@ -1524,11 +1543,11 @@ async def api_score_multi_species(
     start_time = time.time()
     
     try:
-        logger.info(f"Multi-species analysis for ({lat:.4f}, {lon:.4f}) - ERA5: {bool(enable_era5)}")
+        logger.info(f"Multi-species analysis for ({lat:.4f}, {lon:.4f}) - ERA5: {bool(use_era5)}")
         
         # Fetch dati in parallelo
         tasks = [
-            fetch_hybrid_weather_data(lat, lon, total_past_days=20, future_days=10, enable_era5=bool(enable_era5)),
+            fetch_hybrid_weather_data(lat, lon, total_past_days=20, future_days=10, enable_era5=bool(use_era5)),
             fetch_elevation_grid_super_advanced(lat, lon),
         ]
         
@@ -1879,6 +1898,7 @@ async def api_score_multi_species(
             # Weather sources
             "weather_sources": weather_sources,
             "weather_quality_score": round(weather_quality, 3),
+            "era5_enabled": bool(use_era5), # Aggiunto per coerenza
             
             "diagnostics": {
                 "era5_land_used": bool(era5_data),
@@ -1887,7 +1907,7 @@ async def api_score_multi_species(
                 "weather_enhancement": bool(era5_bonus > 0),
                 "scientific_improvements": {
                     "multi_species_coexistence": True,
-                    "era5_land_integration": bool(enable_era5),
+                    "era5_land_integration": bool(use_era5),
                     "borgotaro_model": True,
                     "species_specific_lags": True,
                     "habitat_overlap_analysis": True
@@ -2141,4 +2161,3 @@ async def validation_stats_multi_species():
 
 if __name__ == "__main__":
     import uvicorn
- 
