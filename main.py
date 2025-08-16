@@ -626,16 +626,17 @@ def calculate_species_probabilities(habitat_used: str, month: int, elev_m: float
                 score *= 1.1
         
         
-        # Penalità ecologica forte per aereus in faggeta alta quota
+        # Penalità ecologica forte per B. aereus in faggeta ad alta quota (parametrica)
         try:
             if species == "aereus" and h == "faggio":
-                if elev_m >= 1400:
-                    score *= 0.10
-                elif elev_m > 1200:
-                    score *= 0.20
+                if elev_m is not None:
+                    if elev_m >= 1400:
+                        score *= 0.10
+                    elif elev_m > 1200:
+                        score *= 0.20
         except Exception:
             pass
-        scores[species] = score
+        scores[species] = scorescores[species] = score
     
     # Normalizza in probabilità
     total = sum(scores.values())
