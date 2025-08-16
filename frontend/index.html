@@ -284,14 +284,16 @@
     
     @media (max-width: 768px) {
       .controls{grid-template-columns:1fr;gap:8px}
-      .grid.g3{grid-template-columns:1fr}
-      .grid.g4{grid-template-columns:1fr 1fr}
+      .grid.g3, .grid.g4{grid-template-columns:1fr 1fr} /* Modificato per gestire g4 */
       .input-group{flex-direction:column;align-items:stretch}
       .crowdsource .grid.g2{grid-template-columns:1fr}
       #map{height:280px}
       #chart{height:280px!important;max-height:280px!important}
       .panel{overflow:hidden}
       .species-legend{flex-direction:column;gap:8px}
+    }
+    @media (max-width: 480px) { /* Aggiunto per schermi ancora più piccoli */
+        .grid.g4 { grid-template-columns: 1fr; }
     }
   </style>
 </head>
@@ -362,7 +364,6 @@
         </div>
       </div>
       
-      <!-- Controlli meteo avanzati -->
       <div class="weather-controls">
         <h5>🌦️ Fonti Dati Meteorologici</h5>
         <div class="weather-toggle-group">
@@ -387,8 +388,7 @@
         <div id="map"></div>
     </div>
 
-    <div class="grid g3">
-      <div class="panel section">
+    <div class="grid g4"> <div class="panel section">
         <h3>🎯 Indice Oggi</h3>
         <div class="metric"><div class="k">Forza flush</div><div id="k-index" class="v">—</div></div>
         <div class="hr"></div>
@@ -441,6 +441,15 @@
         <div class="metric"><div class="k">Raccolto atteso</div><div id="k-harvest" class="v" style="font-size:18px">—</div></div>
         <div class="muted" id="k-harvest-note" style="font-size:11px;margin-top:4px"></div>
       </div>
+
+      <div class="panel section">
+        <h3>🗺️ Dati Topografici</h3>
+        <div class="metric"><div class="k">Altitudine</div><div id="k-elevation" class="v">—</div></div>
+        <div class="metric"><div class="k">Pendenza</div><div id="k-slope" class="v">—</div></div>
+        <div class="hr"></div>
+        <div class="metric"><div class="k">Esposizione</div><div id="k-aspect" class="v">—</div></div>
+        <div class="muted" id="k-aspect-source" style="font-size:11px;margin-top:4px"></div>
+      </div>
     </div>
 
     <div class="panel section">
@@ -449,10 +458,8 @@
         ✨ <strong>BoletusLab v2.5.7:</strong> Curve probabilistiche per specie coesistenti • Lag specie-specifico • Algoritmi basati su letteratura scientifica
       </div>
       
-      <!-- Legenda specie -->
       <div id="species-legend" class="species-legend" style="display:none;">
-        <!-- Sarà popolata dinamicamente -->
-      </div>
+        </div>
       
       <div class="lag-explanation" id="lag-explanation" style="display:none;">
         💡 <strong>Fruttificazione Step-Function Multi-Specie:</strong> Curve sovrapposte mostrano timing diversi basati su lag biologico specie-specifico secondo letteratura scientifica.
@@ -569,7 +576,6 @@
 
   <div id="notification" class="notification"></div>
 
-  <!-- LIBRARY LOADING ORDER FIXED -->
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@3.9.1/dist/chart.min.js"></script>
 
@@ -811,10 +817,20 @@
         const hasValidations = data.has_local_validations ? 'Sì' : 'No';
         document.getElementById('k-has-validations').textContent = `validazioni: ${hasValidations}`;
         
-        // NUOVO: Gestione specie multiple
+        // NUOVO: Aggiorna pannello topografia
+        try {
+          document.getElementById('k-elevation').textContent = data.elevation_m ? `${data.elevation_m} m` : '—';
+          document.getElementById('k-slope').textContent = data.slope_deg !== undefined ? `${data.slope_deg}°` : '—';
+          document.getElementById('k-aspect').textContent = data.aspect_octant || 'N/D';
+          document.getElementById('k-aspect-source').textContent = data.aspect_source || '';
+        } catch (topoError) {
+          debugLog('Error updating topography KPIs:', topoError);
+        }
+
+        // Gestione specie multiple
         updateSpeciesInfo(data);
         
-        // NUOVO: Mostra qualità e fonti weather del sistema ibrido + ERA5
+        // Mostra qualità e fonti weather del sistema ibrido + ERA5
         if (data.weather_quality_score !== undefined) {
           const qualityDiv = document.getElementById('cumulative-moisture-value');
           if (qualityDiv) {
