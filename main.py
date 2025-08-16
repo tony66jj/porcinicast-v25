@@ -625,18 +625,7 @@ def calculate_species_probabilities(habitat_used: str, month: int, elev_m: float
             elif species in ["edulis", "pinophilus"] and aspect_oct in ["N", "NE", "NW"]:
                 score *= 1.1
         
-        
-        # Penalità ecologica forte: B. aereus in faggeta d'alta quota
-        # Parametrico (non cambia logica): rende molto improbabile aereus in faggio >1200 m
-        try:
-            if species == "aereus" and h == "faggio":
-                if elev_m >= 1400:
-                    score *= 0.10
-                elif elev_m > 1200:
-                    score *= 0.20
-        except Exception:
-            pass
-        scores[species] = scorescores[species] = score
+        scores[species] = score
     
     # Normalizza in probabilità
     total = sum(scores.values())
