@@ -626,18 +626,31 @@ def calculate_species_probabilities(habitat_used: str, month: int, elev_m: float
                 score *= 1.1
         
         
-        # Penalità ecologica forte: B. aereus in faggeta d'alta quota (coerente con letteratura)
+        # --- Parametric ecological penalties/boosts (do not change model logic) ---
         try:
-            if species == "aereus" and (h == "faggio" or h == "faggeta"):
+            h_low = (h or '').lower()
+            # B. aereus: strongly penalized in beech forest at high elevation
+            if species == "aereus" and h_low in ("faggio","faggeta"):
                 if elev_m is not None:
                     if elev_m >= 1400:
                         score *= 0.10
                     elif elev_m > 1200:
                         score *= 0.20
+            # B. pinophilus: prefers conifers; penalize outside, especially beech
+            if species == "pinophilus":
+                if h_low not in ("conifere","abete","pino","abetina","pineta","lariceto"):
+                    score *= 0.40
+                if h_low in ("faggio","faggeta"):
+                    score *= 0.35
+            # Gentle boosts consistent with ecology
+            if species == "reticulatus" and h_low in ("faggio","faggeta"):
+                score *= 1.20
+            if species == "aereus" and h_low in ("quercia","castagno","lecceta","cerreta"):
+                score *= 1.20
         except Exception:
             pass
-
-    scores[species] = score
+        # --- End eco penalties/boosts ---
+scores[species] = score
     
     # Normalizza in probabilità
     total = sum(scores.values())
