@@ -84,9 +84,9 @@ def blend_to_neutral(value: float, neutral: float = 1.0, weight: float = 0.35) -
         return value
 
 app = FastAPI(
-    title="BoletusLab® v3.0.0 - Sistema Multi-Specie con ERA5-Land",
-    version="3.0.0",
-    description="Sistema meteorologico ibrido con curve multiple sovrapposte per coesistenza specie"
+    title="BoletusLab® v3.1.0 - Sistema Multi-Specie con Stress Anossico",
+    version="3.1.0",
+    description="Sistema meteorologico ibrido con gestione della saturazione del suolo"
 )
 
 app.add_middleware(
@@ -97,7 +97,7 @@ app.add_middleware(
     allow_credentials=True
 )
 
-HEADERS = {"User-Agent":"BoletusLab/3.0.0 (+scientific)", "Accept-Language":"it"}
+HEADERS = {"User-Agent":"BoletusLab/3.1.0 (+scientific)", "Accept-Language":"it"}
 CDS_API_URL = os.environ.get("CDS_API_URL", "https://cds.climate.copernicus.eu/api")
 CDS_API_KEY = os.environ.get("CDS_API_KEY", "")
 
@@ -130,7 +130,7 @@ def init_database():
                 notes TEXT,
                 habitat_observed TEXT,
                 predicted_score INTEGER,
-                model_version TEXT DEFAULT '3.0.0',
+                model_version TEXT DEFAULT '3.1.0',
                 coexistence_predicted BOOLEAN DEFAULT FALSE,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 geohash TEXT
@@ -148,7 +148,7 @@ def init_database():
                 habitat_searched TEXT,
                 notes TEXT,
                 predicted_score INTEGER,
-                model_version TEXT DEFAULT '3.0.0',
+                model_version TEXT DEFAULT '3.1.0',
                 search_thoroughness INTEGER DEFAULT 3,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 geohash TEXT
@@ -168,7 +168,7 @@ def init_database():
                 habitat TEXT,
                 confidence_data TEXT,
                 weather_data TEXT,
-                model_version TEXT DEFAULT '3.0.0',
+                model_version TEXT DEFAULT '3.1.0',
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 geohash TEXT
             )
@@ -1339,7 +1339,7 @@ def save_prediction_multi_species(lat: float, lon: float, date: str,
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ''', (lat, lon, date, primary_score, primary_species, secondary_species,
               coexistence_prob, json.dumps(confidence_data), json.dumps(weather_data),
-              "3.0.0", geohash))
+              "3.1.0", geohash))
         
         conn.commit()
         conn.close()
@@ -1412,7 +1412,7 @@ def build_analysis_multi_species_v30(payload: Dict[str, Any]) -> str:
     lines = []
     
     # Header
-    lines.append("<h4>🧬 Analisi Biologica Multi-Specie v3.0.0</h4>")
+    lines.append("<h4>🧬 Analisi Biologica Multi-Specie v3.1.0</h4>")
     lines.append("<p><em>Sistema a curve multiple basato su letteratura scientifica di coesistenza (Borgotaro model, Van der Linde 2004, Leonardi et al. 2005)</em></p>")
     
     # Sistema meteorologico avanzato
@@ -1545,6 +1545,7 @@ def build_analysis_multi_species_v30(payload: Dict[str, Any]) -> str:
     lines.append("<li>Van der Linde (2004): Studio morfologico e filogenetico europeo</li>")
     lines.append("<li>Leonardi et al. (2005): Analisi molecolare ITS del complesso B. edulis</li>")
     lines.append("<li>Studi di sovrapposizione ecologica in ecosistemi mediterranei e temperati</li>")
+    lines.append("<li>Idrologia del suolo per lo stress anossico del micelio in condizioni di saturazione.</li>")
     lines.append("</ul>")
     
     return "\n".join(lines)
@@ -1565,8 +1566,8 @@ async def api_score_multi_species(
     background_tasks: BackgroundTasks = None
 ):
     """
-    🚀 ENDPOINT MULTI-SPECIE v3.0.0
-    Sistema a curve multiple con coesistenza scientificamente documentata
+    🚀 ENDPOINT MULTI-SPECIE v3.1.0
+    Sistema a curve multiple con gestione dello stress anossico
     """
     start_time = time.time()
     
@@ -1708,6 +1709,26 @@ async def api_score_multi_species(
         # Eventi piovosi
         rain_events = detect_rain_events_multi_species(P_past + P_future, smi_series, month_current, elev_m, lat, cumulative_moisture_series, months_series)
         
+        # ===== INIZIO AGGIORNAMENTO: LOGICA STRESS ANOSSICO v3.1.0 =====
+        fattore_stress_anossico = 1.0
+        p_ultimi_3_giorni = sum(P_past[-3:])
+
+        # CASO 1: STRESS FORTE (Pioggia > 80mm e suolo saturo)
+        if p_ultimi_3_giorni > 80.0 and smi_current > 0.95:
+            if slope_deg < 5.0:       # Terreno pianeggiante -> Rischio MASSIMO
+                fattore_stress_anossico = 0.65
+                logger.info(f"Stress anossico FORTE rilevato: P3d={p_ultimi_3_giorni:.1f}mm, SMI={smi_current:.2f}, Pendenza={slope_deg:.1f}°")
+            elif slope_deg < 12.0:      # Pendenza lieve -> Rischio MODERATO
+                fattore_stress_anossico = 0.80
+                logger.info(f"Stress anossico MODERATO rilevato: P3d={p_ultimi_3_giorni:.1f}mm, SMI={smi_current:.2f}, Pendenza={slope_deg:.1f}°")
+
+        # CASO 2: STRESS MODERATO (Pioggia > 60mm e suolo quasi saturo)
+        elif p_ultimi_3_giorni > 60.0 and smi_current > 0.90:
+            if slope_deg < 5.0:       # Rischio PRESENTE solo su terreno pianeggiante
+                fattore_stress_anossico = 0.85
+                logger.info(f"Stress anossico LEGGERO rilevato: P3d={p_ultimi_3_giorni:.1f}mm, SMI={smi_current:.2f}, Pendenza={slope_deg:.1f}°")
+        # ===== FINE AGGIORNAMENTO =====
+
         # Genera forecast per specie multiple
         forecast_combined = [0.0] * future_days
         species_forecasts = {}
@@ -1721,7 +1742,15 @@ async def api_score_multi_species(
                 
             species_forecast = [0.0] * future_days
             species_profile = SPECIES_PROFILES_V30[species]
+            
+            # Recupera il lag base
             lag_days = species_lags.get(species, 8)
+            
+            # ===== INIZIO AGGIORNAMENTO: Applica ritardo da stress anossico v3.1.0 =====
+            ritardo_da_stress = (1.0 - fattore_stress_anossico) * 3.0
+            lag_days += round(ritardo_da_stress)
+            # ===== FINE AGGIORNAMENTO =====
+
             # --- aspect-based lag micro-correction (stagionale, pesata per sorgente) ---
             try:
                 include_aspect_lag = True
@@ -1738,7 +1767,7 @@ async def api_score_multi_species(
                 delta = base_shift * w_src * abs(northness)
                 effect = (-delta if northness>0 else +delta) if is_summer else (+delta if northness>0 else -delta)
                 lag_days = int(round(max(2.0, min(18.0, lag_days + effect))))
-            
+
             for event_idx, event_mm, event_strength in rain_events:
                 peak_idx = event_idx + lag_days
                 base_amplitude = event_strength * microclimate_energy * probability
@@ -1755,11 +1784,15 @@ async def api_score_multi_species(
                 
                 final_amplitude = base_amplitude * vpd_penalty
                 
-                
                 mpf = species_profile.get("min_precip_flush", 8.5)
                 flush_scale = min(1.6, max(0.6, (event_mm / mpf) ** 0.85))
                 final_amplitude *= flush_scale
-# Step function per specie
+
+                # ===== INIZIO AGGIORNAMENTO: Applica penalità stress anossico v3.1.0 =====
+                final_amplitude *= fattore_stress_anossico
+                # ===== FINE AGGIORNAMENTO =====
+                
+                # Step function per specie
                 sigma = 2.2 if event_strength > 0.8 else 1.8
                 skew = 0.3 if species in ["aereus", "reticulatus"] else 0.1
                 
@@ -1994,8 +2027,8 @@ async def api_score_multi_species(
             "validation_count": validation_count,
             
             # Metadata
-            "model_version": "3.0.0",
-            "model_type": "multi_species_coexistence",
+            "model_version": "3.1.0",
+            "model_type": "multi_species_coexistence_anoxic_stress",
             "processing_time_ms": processing_time,
             "timestamp": datetime.now(timezone.utc).isoformat(),
             
@@ -2005,6 +2038,7 @@ async def api_score_multi_species(
             "era5_enabled": bool(use_era5), # Aggiunto per coerenza
             
             "diagnostics": {
+                "anoxic_stress_factor": round(fattore_stress_anossico, 2),
                 "era5_land_used": bool(era5_data),
                 "species_count": len(species_probabilities),
                 "coexistence_detected": coexistence_scenario != "dominanza_netta",
@@ -2014,7 +2048,8 @@ async def api_score_multi_species(
                     "era5_land_integration": bool(use_era5),
                     "borgotaro_model": True,
                     "species_specific_lags": True,
-                    "habitat_overlap_analysis": True
+                    "habitat_overlap_analysis": True,
+                    "anoxic_stress_model": True
                 }
             }
         }
@@ -2068,14 +2103,14 @@ async def health():
     return {
         "ok": True, 
         "time": datetime.now(timezone.utc).isoformat(), 
-        "version": "3.0.0",
-        "model": "multi_species_coexistence_era5",
+        "version": "3.1.0",
+        "model": "multi_species_coexistence_anoxic_stress",
         "capabilities": capabilities,
         "weather_sources": weather_sources,
         "features": [
             "multi_species_coexistence", "borgotaro_model", "era5_land_integration",
             "species_specific_lags", "habitat_overlap_analysis", "curve_multiple",
-            "scientific_documentation", "enhanced_confidence_5d"
+            "scientific_documentation", "enhanced_confidence_5d", "anoxic_stress_model"
         ]
     }
 
@@ -2144,7 +2179,7 @@ async def report_sighting(
              coexistence_predicted)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ''', (lat, lon, date, species, secondary_species or None, quantity, size_cm_avg,
-              confidence, notes, habitat_observed, "3.0.0", geohash, bool(secondary_species)))
+              confidence, notes, habitat_observed, "3.1.0", geohash, bool(secondary_species)))
         
         conn.commit()
         conn.close()
@@ -2175,7 +2210,7 @@ async def report_no_findings(
              notes, search_thoroughness, geohash, model_version)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ''', (lat, lon, date, searched_hours, search_method, habitat_searched,
-              notes, search_thoroughness, geohash, "3.0.0"))
+              notes, search_thoroughness, geohash, "3.1.0"))
         
         conn.commit()
         conn.close()
@@ -2250,12 +2285,13 @@ async def validation_stats_multi_species():
             "avg_confidence": round(pos_stats[1] or 0, 2),
             "top_species_detailed": top_species,
             "ready_for_ml": total_validations >= 100,
-            "model_version": "3.0.0",
+            "model_version": "3.1.0",
             "multi_species_features": {
                 "coexistence_tracking": True,
                 "species_pair_analysis": True,
                 "borgotaro_model_implemented": True,
-                "era5_land_integration": bool(CDS_API_KEY)
+                "era5_land_integration": bool(CDS_API_KEY),
+                "anoxic_stress_model": True
             }
         }
         
