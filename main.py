@@ -581,91 +581,107 @@ SPECIES_PROFILES_V30 = {
 }
 
 # ===== SISTEMA DI COESISTENZA CON REGOLE ECOLOGICHE RIGIDE =====
-
 def calculate_species_probabilities(habitat_used: str, month: int, elev_m: float, 
+
+# ===== PESO FENOLOGICO CONTINUO (DOY) =====
+def phenology_weight(species: str, doy: int, elev_m: float) -> float:
+    """Peso fenologico dolce [0..1] in funzione del giorno dell'anno e quota (shift 10 DOY / 1000 m).
+    Finestre iniziali tarate per riprodurre la fenologia corrente per mese.
+    """
+    windows = {
+        "reticulatus": (150, 230, 280),
+        "edulis":      (220, 275, 330),
+        "aereus":      (170, 240, 295),
+        "pinophilus":  (210, 260, 310),
+    }
+    s, p, e = windows.get(species, (200, 260, 320))
+    shift = int(round((elev_m or 0.0) / 1000.0 * 10.0))
+    s += shift; p += shift; e += shift
+    def ramp(x, x0, x1):
+        if x <= x0: return 0.0
+        if x >= x1: return 1.0
+        return (x - x0) / (x1 - x0 + 1e-6)
+    w_up = ramp(doy, s-20, p)
+    w_down = 1.0 - ramp(doy, p, e+20)
+    w = max(0.0, min(1.0, min(w_up, w_down)))
+    return float(w)
+
                                    aspect_oct: Optional[str], lat: float) -> Dict[str, float]:
     """
-    Calcola probabilità di coesistenza con regole ecologiche *morbide* (pesi),
-    evitando abbinamenti assurdi ma senza escludere host secondari documentati.
-    Restituisce un dizionario normalizzato {specie: prob}.
+    Calcola probabilità di coesistenza con regole di habitat più rigide come richiesto.
+    - Faggio: solo edulis o reticulatus.
+    - Quercia: solo aereus.
+    - Conifere: solo pinophilus.
+    - Castagno/Misto: logica più flessibile.
     """
-    h = (habitat_used or "misto").lower()
     scores = { "aereus": 0.0, "reticulatus": 0.0, "edulis": 0.0, "pinophilus": 0.0 }
+    h = (habitat_used or "misto").lower()
 
-    # Helper su latitudine: Nord più fresco, Sud più caldo/termofilo
-    is_north = lat >= 44.5
-    is_south = lat <= 41.5
-
-    # Faggeta: edulis/reticulatus dominate; aereus raro ma possibile in basse quote e mesi caldi
     if h == "faggio":
-        scores["edulis"] = 0.6
-        scores["reticulatus"] = 0.6
-        if month >= 9: 
-            scores["edulis"] += 0.3
-        if elev_m > 1100: 
-            scores["edulis"] += 0.2
-        if month <= 8:
-            scores["reticulatus"] += 0.3
-        if elev_m <= 1100:
-            scores["reticulatus"] += 0.2
-        # aereus molto marginale in faggeta fresca; solo a basse quote/latitudini calde
-        if (month in [6,7,8]) and (elev_m < 900) and not is_north:
-            scores["aereus"] = 0.15  # non dominante
+        # Nelle faggete, solo edulis o reticulatus.
+        # Li distinguiamo in base a stagione e altitudine per una stima più accurata.
+        score_edulis = 1.0
+        score_reticulatus = 1.0
+        
+        # B. edulis è tipicamente più tardivo (autunnale) e di alta quota.
+        if month >= 9: score_edulis *= 1.5
+        if elev_m > 1100: score_edulis *= 1.5
+        
+        # B. reticulatus (aestivalis) è più precoce (estivo) e comune a quote inferiori nella faggeta.
+        if month < 9: score_reticulatus *= 1.5
+        if elev_m <= 1100: score_reticulatus *= 1.5
+        
+        scores["edulis"] = score_edulis
+        scores["reticulatus"] = score_reticulatus
 
-    # Quercia: aereus primario; edulis e reticulatus possibili (edulis più tardo/fresco)
     elif h == "quercia":
-        scores["aereus"] = 0.8
-        scores["reticulatus"] = 0.4
-        # edulis appare in querceti montani/tardi
-        if (month >= 9 and (elev_m >= 700 or is_north)):
-            scores["edulis"] = 0.35
-
-    # Conifere/pino: pinophilus primario; edulis secondario ad alta quota/autunno
+        # Nelle querce, l'unica specie ecologicamente corretta è B. aereus.
+        scores["aereus"] = 1.0
+        
     elif h in ["conifere", "pino"]:
-        scores["pinophilus"] = 0.85
-        if month >= 9 and elev_m >= 900:
-            scores["edulis"] = 0.25
-        # reticulatus raro in conifere pure
-        scores["reticulatus"] = 0.05
-
-    # Castagno: reticulatus e aereus frequenti; edulis possibile tardi in stagioni fresche
+        # Nelle conifere, la specie simbionte è B. pinophilus.
+        scores["pinophilus"] = 1.0
+        
     elif h == "castagno":
-        scores["reticulatus"] = 0.6
-        scores["aereus"] = 0.5
-        if month >= 9 and (is_north or elev_m >= 700):
-            scores["edulis"] = 0.2
+        # Nei castagneti sono comuni specie termofile come reticulatus e aereus.
+        scores["reticulatus"] = 1.0
+        scores["aereus"] = 0.7  # Spesso presente ma con B. reticulatus come dominante.
+        
+    else:  # 'misto' o altri habitat non specificati
+        # Per i boschi misti, usiamo una logica flessibile che considera più fattori.
+        # B. aereus (termofilo)
+        if "quercia" in h or "castagno" in h or h == "misto":
+            scores["aereus"] = 1.0 if 6 <= month <= 9 and elev_m < 1000 else 0.1
+        # B. reticulatus (estivo)
+        if "faggio" in h or "quercia" in h or "castagno" in h or h == "misto":
+            scores["reticulatus"] = 1.0 if 5 <= month <= 9 else 0.2
+        # B. edulis (autunnale, montano)
+        if "faggio" in h or "conifere" in h or h == "misto":
+            scores["edulis"] = 1.0 if 8 <= month <= 11 and elev_m > 800 else 0.2
+        # B. pinophilus (legato alle conifere)
+        if "conifere" in h or "pino" in h or h == "misto":
+            scores["pinophilus"] = 0.9 if elev_m > 700 else 0.1
 
-    # Misto: media pesata
-    else:
-        scores = {"aereus":0.35, "reticulatus":0.45, "edulis":0.35, "pinophilus":0.25}
-        # aggiusta per quota/stagione
-        if month >= 9:
-            scores["edulis"] += 0.1
-        if month <= 8:
-            scores["reticulatus"] += 0.1
-        if elev_m >= 1000:
-            scores["edulis"] += 0.1
-            scores["pinophilus"] += 0.1
-
-    # Normalizza e filtra specie marginali
-    # clamp min a 0, poi normalizza
-    for k in scores:
-        scores[k] = max(0.0, scores[k])
-
+    # Normalizza i punteggi per ottenere le probabilità
     total = sum(scores.values())
-    if total <= 0:
+    if total > 0:
+        probabilities = {species: score / total for species, score in scores.items()}
+    else:
+        # Fallback nel caso nessun punteggio sia > 0
         return {"reticulatus": 1.0}
-    probabilities = {k: v/total for k, v in scores.items()}
-
-    # Tieni solo specie con probabilità >= 0.08 o la top-1
-    top = max(probabilities, key=probabilities.get)
-    filtered = {k: v for k, v in probabilities.items() if v >= 0.08 or k == top}
-
-    # Rinormalizza
-    s = sum(filtered.values())
-    if s <= 0:
-        return {top: 1.0}
-    return {k: v/s for k, v in filtered.items()}
+    
+    # Filtra le specie con probabilità significativa per evitare rumore nel grafico
+    significant_species = {k: v for k, v in probabilities.items() if v > 0.05}
+    
+    # Se il filtro rimuove tutte le specie, ripristina la più probabile come fallback
+    if not significant_species:
+        if probabilities:
+            most_probable = max(probabilities, key=probabilities.get)
+            return {most_probable: 1.0}
+        else:
+            return {"reticulatus": 1.0} # Fallback definitivo
+        
+    return significant_species
 
 
 def determine_coexistence_scenario(species_probabilities: Dict[str, float]) -> str:
@@ -694,7 +710,10 @@ def calculate_weighted_lag(species_probabilities: Dict[str, float],
     """
     species_lags = {}
     
-    for species, probability in species_probabilities.items():
+            species_today_scores = {}
+        dominant_species_today = None
+        # Loop su specie
+        for species, probability in species_probabilities.items():
         if probability > 0.05:  # Solo specie significativa
             profile = SPECIES_PROFILES_V30[species]
             
@@ -1245,9 +1264,8 @@ def habitat_heuristic_super_advanced(lat: float, lon: float) -> Tuple[str, float
     return habitat, conf, scores
 
 # ===== EVENT DETECTION MULTI-SPECIE =====
-def detect_rain_events_multi_species(rains: List[float], smi_series: List[float], 
-                                    month: int, elevation: float, lat: float,
-                                    cumulative_moisture_series: List[float]) -> List[Tuple[int, float, float]]:
+def detect_rain_events_multi_species(rains: List[float], smi_series: List[float], month: int, elevation: float, lat: float,
+                                    cumulative_moisture_series: List[float], months_series: Optional[List[int]] = None) -> List[Tuple[int, float, float]]:
     events = []
     n = len(rains)
     i = 0
@@ -1257,7 +1275,9 @@ def detect_rain_events_multi_species(rains: List[float], smi_series: List[float]
         cum_moisture = cumulative_moisture_series[i] if i < len(cumulative_moisture_series) else 0.0
         temp_trend = 0.0
         
-        threshold_1d = dynamic_rain_threshold_v30(8.5, smi_local, month, elevation, lat, temp_trend, cum_moisture)
+        base_thr = 8.5
+        local_month = (months_series[i] if months_series and i < len(months_series) else month)
+        threshold_1d = dynamic_rain_threshold_v30(base_thr, smi_local, local_month, elevation, lat, temp_trend, cum_moisture)
         threshold_2d = threshold_1d * 1.4
         threshold_3d = threshold_1d * 1.8
         
@@ -1627,7 +1647,23 @@ async def api_score_multi_species(
         past_days = 20
         future_days = 10
         
-        P_past = P_series[:past_days]
+        P_past = P_series[
+        # Costruisci serie mesi per ogni giorno (20 passati + 10 futuri)
+        base_date = datetime.now(timezone.utc).date()
+        months_series = []
+        for i in range(len(P_series)):
+            if i < past_days:
+                day = base_date - timedelta(days=(past_days - 1 - i))
+            else:
+                day = base_date + timedelta(days=(i - past_days + 1))
+            months_series.append(day.month)
+        # DOY per giorni futuri e finestra smoothing adattiva
+        future_dates = [ (datetime.now(timezone.utc).date() + timedelta(days=i+1)) for i in range(future_days) ]
+        doys_future = [ d.timetuple().tm_yday for d in future_dates ]
+        doy_today = datetime.now(timezone.utc).date().timetuple().tm_yday
+        doy_median = sorted(doys_future)[len(doys_future)//2]
+        win_len = 5 if doy_median < 260 else 7
+:past_days]
         P_future = P_series[past_days:past_days + future_days]
         Tmean_past = Tmean_series[:past_days]
         Tmean_future = Tmean_series[past_days:past_days + future_days]
@@ -1673,9 +1709,7 @@ async def api_score_multi_species(
                                             vpd_current/10.0, cumulative_moisture_current)
         
         # Eventi piovosi
-        rain_events = detect_rain_events_multi_species(
-            P_past + P_future, smi_series, month_current, elev_m, lat, cumulative_moisture_series
-        )
+        rain_events = detect_rain_events_multi_species(P_past + P_future, smi_series, month_current, elev_m, lat, cumulative_moisture_series, months_series)
         
         # Genera forecast per specie multiple
         forecast_combined = [0.0] * future_days
@@ -1703,8 +1737,14 @@ async def api_score_multi_species(
                     vpd_penalty = 1.0
                 
                 final_amplitude = base_amplitude * vpd_penalty
-                # Scala per fabbisogno idrico specie-specifico
-                mpf = species_profile.get("min_precip_flush", 8.5)
+                mpf = species_profile.get("min_precip_flush"
+                # Calcolo oggi (Giorno 0) con stessa pipeline
+                abs_day_today = past_days - 1
+                kernel_today = gaussian_kernel_advanced(abs_day_today, peak_idx, sigma, skewness=skew)
+                w_phen_today = phenology_weight(species, doy_today, elev_m)
+                today_value = 100.0 * final_amplitude * kernel_today * w_phen_today
+                species_today_scores[species] = species_today_scores.get(species, 0.0) + today_value
+    , 8.5)
                 flush_scale = min(1.6, max(0.6, (event_mm / mpf) ** 0.85))
                 final_amplitude *= flush_scale
                 
@@ -1715,7 +1755,8 @@ async def api_score_multi_species(
                 for day_idx in range(future_days):
                     abs_day_idx = past_days + day_idx
                     kernel_value = gaussian_kernel_advanced(abs_day_idx, peak_idx, sigma, skewness=skew)
-                    species_forecast[day_idx] += 100.0 * final_amplitude * kernel_value
+                    w_phen = phenology_weight(species, doys_future[day_idx], elev_m)
+                    species_forecast[day_idx] += 100.0 * final_amplitude * kernel_value * w_phen
                 
                 # Dettagli evento per questa specie
                 when_str = time_series[event_idx] if event_idx < len(time_series) else f"+{event_idx - past_days + 1}d"
@@ -1733,7 +1774,7 @@ async def api_score_multi_species(
             
             # Smooth e clamp specie forecast
             species_forecast_clamped = [clamp(v, 0.0, 100.0) for v in species_forecast]
-            species_forecast_smoothed = savitzky_golay_advanced(species_forecast_clamped)
+            species_forecast_smoothed = savitzky_golay_advanced(species_forecast_clamped, window_length=win_len)
             species_forecasts[species] = [int(round(x)) for x in species_forecast_smoothed]
             
             # Aggiungi al forecast combinato
@@ -1753,7 +1794,12 @@ async def api_score_multi_species(
                     best_mean = window_mean
                     best_window = {"start": i, "end": i+2, "mean": int(round(window_mean))}
         
-        current_index = forecast_final[0] if forecast_final else 0
+        # Indice OGGI = Day 0 della specie dominante (coerente con le curve)
+        if species_today_scores:
+            dominant_species_today = max(species_today_scores.items(), key=lambda kv: kv[1])[0]
+            current_index = int(round(max(species_today_scores.values())))
+        else:
+            current_index = forecast_final[0] if forecast_final else 0
         
         # Validazioni e confidence
         has_validations, validation_count, validation_accuracy = check_recent_validations_super_advanced(lat, lon)
@@ -1866,6 +1912,7 @@ async def api_score_multi_species(
             
             # Multi-specie core
             "index": current_index,
+            "dominant_species_today": dominant_species_today,
             "forecast": forecast_final,
             "best_window": best_window,
             "confidence_detailed": confidence_5d,
