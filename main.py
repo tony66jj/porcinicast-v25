@@ -581,83 +581,91 @@ SPECIES_PROFILES_V30 = {
 }
 
 # ===== SISTEMA DI COESISTENZA CON REGOLE ECOLOGICHE RIGIDE =====
+
 def calculate_species_probabilities(habitat_used: str, month: int, elev_m: float, 
                                    aspect_oct: Optional[str], lat: float) -> Dict[str, float]:
     """
-    Calcola probabilità di coesistenza con regole di habitat più rigide come richiesto.
-    - Faggio: solo edulis o reticulatus.
-    - Quercia: solo aereus.
-    - Conifere: solo pinophilus.
-    - Castagno/Misto: logica più flessibile.
+    Calcola probabilità di coesistenza con regole ecologiche *morbide* (pesi),
+    evitando abbinamenti assurdi ma senza escludere host secondari documentati.
+    Restituisce un dizionario normalizzato {specie: prob}.
     """
-    scores = { "aereus": 0.0, "reticulatus": 0.0, "edulis": 0.0, "pinophilus": 0.0 }
     h = (habitat_used or "misto").lower()
+    scores = { "aereus": 0.0, "reticulatus": 0.0, "edulis": 0.0, "pinophilus": 0.0 }
 
+    # Helper su latitudine: Nord più fresco, Sud più caldo/termofilo
+    is_north = lat >= 44.5
+    is_south = lat <= 41.5
+
+    # Faggeta: edulis/reticulatus dominate; aereus raro ma possibile in basse quote e mesi caldi
     if h == "faggio":
-        # Nelle faggete, solo edulis o reticulatus.
-        # Li distinguiamo in base a stagione e altitudine per una stima più accurata.
-        score_edulis = 1.0
-        score_reticulatus = 1.0
-        
-        # B. edulis è tipicamente più tardivo (autunnale) e di alta quota.
-        if month >= 9: score_edulis *= 1.5
-        if elev_m > 1100: score_edulis *= 1.5
-        
-        # B. reticulatus (aestivalis) è più precoce (estivo) e comune a quote inferiori nella faggeta.
-        if month < 9: score_reticulatus *= 1.5
-        if elev_m <= 1100: score_reticulatus *= 1.5
-        
-        scores["edulis"] = score_edulis
-        scores["reticulatus"] = score_reticulatus
+        scores["edulis"] = 0.6
+        scores["reticulatus"] = 0.6
+        if month >= 9: 
+            scores["edulis"] += 0.3
+        if elev_m > 1100: 
+            scores["edulis"] += 0.2
+        if month <= 8:
+            scores["reticulatus"] += 0.3
+        if elev_m <= 1100:
+            scores["reticulatus"] += 0.2
+        # aereus molto marginale in faggeta fresca; solo a basse quote/latitudini calde
+        if (month in [6,7,8]) and (elev_m < 900) and not is_north:
+            scores["aereus"] = 0.15  # non dominante
 
+    # Quercia: aereus primario; edulis e reticulatus possibili (edulis più tardo/fresco)
     elif h == "quercia":
-        # Nelle querce, l'unica specie ecologicamente corretta è B. aereus.
-        scores["aereus"] = 1.0
-        
-    elif h in ["conifere", "pino"]:
-        # Nelle conifere, la specie simbionte è B. pinophilus.
-        scores["pinophilus"] = 1.0
-        
-    elif h == "castagno":
-        # Nei castagneti sono comuni specie termofile come reticulatus e aereus.
-        scores["reticulatus"] = 1.0
-        scores["aereus"] = 0.7  # Spesso presente ma con B. reticulatus come dominante.
-        
-    else:  # 'misto' o altri habitat non specificati
-        # Per i boschi misti, usiamo una logica flessibile che considera più fattori.
-        # B. aereus (termofilo)
-        if "quercia" in h or "castagno" in h or h == "misto":
-            scores["aereus"] = 1.0 if 6 <= month <= 9 and elev_m < 1000 else 0.1
-        # B. reticulatus (estivo)
-        if "faggio" in h or "quercia" in h or "castagno" in h or h == "misto":
-            scores["reticulatus"] = 1.0 if 5 <= month <= 9 else 0.2
-        # B. edulis (autunnale, montano)
-        if "faggio" in h or "conifere" in h or h == "misto":
-            scores["edulis"] = 1.0 if 8 <= month <= 11 and elev_m > 800 else 0.2
-        # B. pinophilus (legato alle conifere)
-        if "conifere" in h or "pino" in h or h == "misto":
-            scores["pinophilus"] = 0.9 if elev_m > 700 else 0.1
+        scores["aereus"] = 0.8
+        scores["reticulatus"] = 0.4
+        # edulis appare in querceti montani/tardi
+        if (month >= 9 and (elev_m >= 700 or is_north)):
+            scores["edulis"] = 0.35
 
-    # Normalizza i punteggi per ottenere le probabilità
-    total = sum(scores.values())
-    if total > 0:
-        probabilities = {species: score / total for species, score in scores.items()}
+    # Conifere/pino: pinophilus primario; edulis secondario ad alta quota/autunno
+    elif h in ["conifere", "pino"]:
+        scores["pinophilus"] = 0.85
+        if month >= 9 and elev_m >= 900:
+            scores["edulis"] = 0.25
+        # reticulatus raro in conifere pure
+        scores["reticulatus"] = 0.05
+
+    # Castagno: reticulatus e aereus frequenti; edulis possibile tardi in stagioni fresche
+    elif h == "castagno":
+        scores["reticulatus"] = 0.6
+        scores["aereus"] = 0.5
+        if month >= 9 and (is_north or elev_m >= 700):
+            scores["edulis"] = 0.2
+
+    # Misto: media pesata
     else:
-        # Fallback nel caso nessun punteggio sia > 0
+        scores = {"aereus":0.35, "reticulatus":0.45, "edulis":0.35, "pinophilus":0.25}
+        # aggiusta per quota/stagione
+        if month >= 9:
+            scores["edulis"] += 0.1
+        if month <= 8:
+            scores["reticulatus"] += 0.1
+        if elev_m >= 1000:
+            scores["edulis"] += 0.1
+            scores["pinophilus"] += 0.1
+
+    # Normalizza e filtra specie marginali
+    # clamp min a 0, poi normalizza
+    for k in scores:
+        scores[k] = max(0.0, scores[k])
+
+    total = sum(scores.values())
+    if total <= 0:
         return {"reticulatus": 1.0}
-    
-    # Filtra le specie con probabilità significativa per evitare rumore nel grafico
-    significant_species = {k: v for k, v in probabilities.items() if v > 0.05}
-    
-    # Se il filtro rimuove tutte le specie, ripristina la più probabile come fallback
-    if not significant_species:
-        if probabilities:
-            most_probable = max(probabilities, key=probabilities.get)
-            return {most_probable: 1.0}
-        else:
-            return {"reticulatus": 1.0} # Fallback definitivo
-        
-    return significant_species
+    probabilities = {k: v/total for k, v in scores.items()}
+
+    # Tieni solo specie con probabilità >= 0.08 o la top-1
+    top = max(probabilities, key=probabilities.get)
+    filtered = {k: v for k, v in probabilities.items() if v >= 0.08 or k == top}
+
+    # Rinormalizza
+    s = sum(filtered.values())
+    if s <= 0:
+        return {top: 1.0}
+    return {k: v/s for k, v in filtered.items()}
 
 
 def determine_coexistence_scenario(species_probabilities: Dict[str, float]) -> str:
@@ -1249,7 +1257,7 @@ def detect_rain_events_multi_species(rains: List[float], smi_series: List[float]
         cum_moisture = cumulative_moisture_series[i] if i < len(cumulative_moisture_series) else 0.0
         temp_trend = 0.0
         
-        threshold_1d = dynamic_rain_threshold_v30(smi_local, month, elevation, lat, temp_trend, cum_moisture)
+        threshold_1d = dynamic_rain_threshold_v30(8.5, smi_local, month, elevation, lat, temp_trend, cum_moisture)
         threshold_2d = threshold_1d * 1.4
         threshold_3d = threshold_1d * 1.8
         
@@ -1695,6 +1703,10 @@ async def api_score_multi_species(
                     vpd_penalty = 1.0
                 
                 final_amplitude = base_amplitude * vpd_penalty
+                # Scala per fabbisogno idrico specie-specifico
+                mpf = species_profile.get("min_precip_flush", 8.5)
+                flush_scale = min(1.6, max(0.6, (event_mm / mpf) ** 0.85))
+                final_amplitude *= flush_scale
                 
                 # Step function per specie
                 sigma = 2.2 if event_strength > 0.8 else 1.8
