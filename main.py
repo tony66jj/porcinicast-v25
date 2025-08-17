@@ -45,11 +45,11 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-
 # ===== PESO FENOLOGICO CONTINUO (DOY) =====
 def phenology_weight(species: str, doy: int, elev_m: float) -> float:
-    """Peso fenologico dolce [0..1] in funzione del giorno dell'anno e quota (shift ~10 DOY / 1000 m).
-    Finestre impostate per riprodurre i pesi mensili correnti con transizione continua.
+    """
+    Peso fenologico dolce [0..1] in funzione del giorno dell'anno e quota.
+    Shift ~10 DOY / 1000 m per compensare ritardi altitudinali.
     """
     windows = {
         "reticulatus": (150, 230, 280),
@@ -60,12 +60,10 @@ def phenology_weight(species: str, doy: int, elev_m: float) -> float:
     s, p, e = windows.get(species, (200, 260, 320))
     shift = int(round((elev_m or 0.0) / 1000.0 * 10.0))
     s += shift; p += shift; e += shift
-
     def ramp(x, x0, x1):
         if x <= x0: return 0.0
         if x >= x1: return 1.0
         return (x - x0) / (x1 - x0 + 1e-6)
-
     w_up = ramp(doy, s-20, p)
     w_down = 1.0 - ramp(doy, p, e+20)
     w = max(0.0, min(1.0, min(w_up, w_down)))
@@ -1653,7 +1651,7 @@ async def api_score_multi_species(
         Tmax_past = Tmax_series[:past_days]
         RH_past = RH_series[:past_days]
         RH_future = RH_series[past_days:past_days + future_days]
-        # Serie dei mesi per ogni giorno (20 passati + 10 futuri)
+        # Serie mesi per ogni giorno (20 passati + 10 futuri)
         base_date = datetime.now(timezone.utc).date()
         months_series = []
         for i in range(len(P_series)):
@@ -1662,7 +1660,7 @@ async def api_score_multi_species(
             else:
                 day = base_date + timedelta(days=(i - past_days + 1))
             months_series.append(day.month)
-        # DOY per giorni futuri + smoothing adattivo
+        # DOY futuri e smoothing adattivo
         future_dates = [ (datetime.now(timezone.utc).date() + timedelta(days=i+1)) for i in range(future_days) ]
         doys_future = [ d.timetuple().tm_yday for d in future_dates ]
         doy_median = sorted(doys_future)[len(doys_future)//2]
@@ -1680,8 +1678,8 @@ async def api_score_multi_species(
         tmean_7d = sum(Tmean_past[-7:]) / max(1, len(Tmean_past[-7:]))
         tmean_14d = sum(Tmean_past[-14:]) / max(1, len(Tmean_past[-14:])) if len(Tmean_past) else tmean_7d
         tmean7 = 0.7 * tmean_7d + 0.3 * tmean_14d
+        tmean7 = 0.7 * tmean_7d + 0.3 * tmean_14d
         thermal_shock = thermal_shock_index_advanced(Tmin_past, window_days=3)
-        thermal_shock_index_advanced(Tmin_past, window_days=3)
         rh_7d = sum(RH_past[-7:]) / max(1, len(RH_past[-7:]))
         vpd_series_future = [vpd_hpa(Tmean_future[i], RH_future[i]) for i in range(min(len(Tmean_future), len(RH_future)))]
         vpd_current = vpd_series_future[0] if vpd_series_future else 5.0
@@ -1724,6 +1722,22 @@ async def api_score_multi_species(
             species_forecast = [0.0] * future_days
             species_profile = SPECIES_PROFILES_V30[species]
             lag_days = species_lags.get(species, 8)
+            # --- aspect-based lag micro-correction (stagionale, pesata per sorgente) ---
+            try:
+                include_aspect_lag = True
+            except Exception:
+                include_aspect_lag = True
+            if include_aspect_lag:
+                oct2deg = {"N":0,"NE":45,"E":90,"SE":135,"S":180,"SW":225,"W":270,"NW":315}
+                a_deg = oct2deg.get(aspect_used, 180)
+                import math
+                northness = math.cos(math.radians(a_deg))
+                is_summer = (doy_today < 260)
+                w_src = 1.0 if aspect_source == "manuale" else 0.5
+                base_shift = 0.6
+                delta = base_shift * w_src * abs(northness)
+                effect = (-delta if northness>0 else +delta) if is_summer else (+delta if northness>0 else -delta)
+                lag_days = int(round(max(2.0, min(18.0, lag_days + effect))))
             
             for event_idx, event_mm, event_strength in rain_events:
                 peak_idx = event_idx + lag_days
@@ -1732,8 +1746,10 @@ async def api_score_multi_species(
                 # VPD penalty
                 if event_idx >= past_days:
                     future_idx = event_idx - past_days
-                    vpd_stress = max(0.0, (vpd_series_future[future_idx] - 8.0) / 10.0) if future_idx < len(vpd_series_future) else 0.0
-                    vpd_penalty = vpd_penalty_advanced(vpd_series_future[future_idx], species_profile["vpd_sens"], elev_m)
+                    if future_idx < len(vpd_series_future):
+                        vpd_penalty = vpd_penalty_advanced(vpd_series_future[future_idx], species_profile["vpd_sens"], elev_m)
+                    else:
+                        vpd_penalty = 1.0
                 else:
                     vpd_penalty = 1.0
                 
