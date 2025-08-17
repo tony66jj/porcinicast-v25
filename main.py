@@ -1,7 +1,7 @@
 from fastapi import FastAPI, Query, HTTPException, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 import os, httpx, math, asyncio, tempfile, time, sqlite3, logging
-from typing import Dict, List, Tuple, Any, Optional
+from typing import Any, Dict, List, Optional, Tuple
 from datetime import datetime, timezone, timedelta
 import json
 
@@ -44,6 +44,32 @@ logging.basicConfig(
     ]
 )
 logger = logging.getLogger(__name__)
+
+
+# ===== PESO FENOLOGICO CONTINUO (DOY) =====
+def phenology_weight(species: str, doy: int, elev_m: float) -> float:
+    """Peso fenologico dolce [0..1] in funzione del giorno dell'anno e quota (shift ~10 DOY / 1000 m).
+    Finestre impostate per riprodurre i pesi mensili correnti con transizione continua.
+    """
+    windows = {
+        "reticulatus": (150, 230, 280),
+        "edulis":      (220, 275, 330),
+        "aereus":      (170, 240, 295),
+        "pinophilus":  (210, 260, 310),
+    }
+    s, p, e = windows.get(species, (200, 260, 320))
+    shift = int(round((elev_m or 0.0) / 1000.0 * 10.0))
+    s += shift; p += shift; e += shift
+
+    def ramp(x, x0, x1):
+        if x <= x0: return 0.0
+        if x >= x1: return 1.0
+        return (x - x0) / (x1 - x0 + 1e-6)
+
+    w_up = ramp(doy, s-20, p)
+    w_down = 1.0 - ramp(doy, p, e+20)
+    w = max(0.0, min(1.0, min(w_up, w_down)))
+    return float(w)
 
 # ======= ESPOSIZIONE: HELPERS =======
 ASPECT_LABELS = {"N":"N","NE":"NE","E":"E","SE":"SE","S":"S","SW":"SW","W":"W","NW":"NW",
@@ -582,30 +608,6 @@ SPECIES_PROFILES_V30 = {
 
 # ===== SISTEMA DI COESISTENZA CON REGOLE ECOLOGICHE RIGIDE =====
 def calculate_species_probabilities(habitat_used: str, month: int, elev_m: float, 
-
-# ===== PESO FENOLOGICO CONTINUO (DOY) =====
-def phenology_weight(species: str, doy: int, elev_m: float) -> float:
-    """Peso fenologico dolce [0..1] in funzione del giorno dell'anno e quota (shift 10 DOY / 1000 m).
-    Finestre iniziali tarate per riprodurre la fenologia corrente per mese.
-    """
-    windows = {
-        "reticulatus": (150, 230, 280),
-        "edulis":      (220, 275, 330),
-        "aereus":      (170, 240, 295),
-        "pinophilus":  (210, 260, 310),
-    }
-    s, p, e = windows.get(species, (200, 260, 320))
-    shift = int(round((elev_m or 0.0) / 1000.0 * 10.0))
-    s += shift; p += shift; e += shift
-    def ramp(x, x0, x1):
-        if x <= x0: return 0.0
-        if x >= x1: return 1.0
-        return (x - x0) / (x1 - x0 + 1e-6)
-    w_up = ramp(doy, s-20, p)
-    w_down = 1.0 - ramp(doy, p, e+20)
-    w = max(0.0, min(1.0, min(w_up, w_down)))
-    return float(w)
-
                                    aspect_oct: Optional[str], lat: float) -> Dict[str, float]:
     """
     Calcola probabilità di coesistenza con regole di habitat più rigide come richiesto.
@@ -710,10 +712,7 @@ def calculate_weighted_lag(species_probabilities: Dict[str, float],
     """
     species_lags = {}
     
-            species_today_scores = {}
-        dominant_species_today = None
-        # Loop su specie
-        for species, probability in species_probabilities.items():
+    for species, probability in species_probabilities.items():
         if probability > 0.05:  # Solo specie significativa
             profile = SPECIES_PROFILES_V30[species]
             
@@ -1264,8 +1263,7 @@ def habitat_heuristic_super_advanced(lat: float, lon: float) -> Tuple[str, float
     return habitat, conf, scores
 
 # ===== EVENT DETECTION MULTI-SPECIE =====
-def detect_rain_events_multi_species(rains: List[float], smi_series: List[float], month: int, elevation: float, lat: float,
-                                    cumulative_moisture_series: List[float], months_series: Optional[List[int]] = None) -> List[Tuple[int, float, float]]:
+def detect_rain_events_multi_species(rains: List[float], smi_series: List[float], month: int, elevation: float, lat: float, cumulative_moisture_series: List[float], months_series: Optional[List[int]] = None) -> List[Tuple[int, float, float]]:
     events = []
     n = len(rains)
     i = 0
@@ -1647,8 +1645,15 @@ async def api_score_multi_species(
         past_days = 20
         future_days = 10
         
-        P_past = P_series[
-        # Costruisci serie mesi per ogni giorno (20 passati + 10 futuri)
+        P_past = P_series[:past_days]
+        P_future = P_series[past_days:past_days + future_days]
+        Tmean_past = Tmean_series[:past_days]
+        Tmean_future = Tmean_series[past_days:past_days + future_days]
+        Tmin_past = Tmin_series[:past_days]
+        Tmax_past = Tmax_series[:past_days]
+        RH_past = RH_series[:past_days]
+        RH_future = RH_series[past_days:past_days + future_days]
+        # Serie dei mesi per ogni giorno (20 passati + 10 futuri)
         base_date = datetime.now(timezone.utc).date()
         months_series = []
         for i in range(len(P_series)):
@@ -1657,20 +1662,12 @@ async def api_score_multi_species(
             else:
                 day = base_date + timedelta(days=(i - past_days + 1))
             months_series.append(day.month)
-        # DOY per giorni futuri e finestra smoothing adattiva
+        # DOY per giorni futuri + smoothing adattivo
         future_dates = [ (datetime.now(timezone.utc).date() + timedelta(days=i+1)) for i in range(future_days) ]
         doys_future = [ d.timetuple().tm_yday for d in future_dates ]
-        doy_today = datetime.now(timezone.utc).date().timetuple().tm_yday
         doy_median = sorted(doys_future)[len(doys_future)//2]
         win_len = 5 if doy_median < 260 else 7
-:past_days]
-        P_future = P_series[past_days:past_days + future_days]
-        Tmean_past = Tmean_series[:past_days]
-        Tmean_future = Tmean_series[past_days:past_days + future_days]
-        Tmin_past = Tmin_series[:past_days]
-        Tmax_past = Tmax_series[:past_days]
-        RH_past = RH_series[:past_days]
-        RH_future = RH_series[past_days:past_days + future_days]
+        doy_today = datetime.now(timezone.utc).date().timetuple().tm_yday
         
         # Calcoli avanzati
         api_value = api_index(P_past, half_life=half)
@@ -1681,10 +1678,10 @@ async def api_score_multi_species(
         cumulative_moisture_current = cumulative_moisture_series[past_days - 1] if past_days - 1 < len(cumulative_moisture_series) else 0.0
         
         tmean_7d = sum(Tmean_past[-7:]) / max(1, len(Tmean_past[-7:]))
-        # Nuovo: media termica su 14 giorni e blend 70/30
-        tmean_14d = sum(Tmean_past[-14:]) / max(1, len(Tmean_past[-14:])) if len(Tmean_past) >= 1 else tmean_7d
-        tmean_blend = 0.7 * tmean_7d + 0.3 * tmean_14d
-thermal_shock = thermal_shock_index_advanced(Tmin_past, window_days=3)
+        tmean_14d = sum(Tmean_past[-14:]) / max(1, len(Tmean_past[-14:])) if len(Tmean_past) else tmean_7d
+        tmean7 = 0.7 * tmean_7d + 0.3 * tmean_14d
+        thermal_shock = thermal_shock_index_advanced(Tmin_past, window_days=3)
+        thermal_shock_index_advanced(Tmin_past, window_days=3)
         rh_7d = sum(RH_past[-7:]) / max(1, len(RH_past[-7:]))
         vpd_series_future = [vpd_hpa(Tmean_future[i], RH_future[i]) for i in range(min(len(Tmean_future), len(RH_future)))]
         vpd_current = vpd_series_future[0] if vpd_series_future else 5.0
@@ -1707,11 +1704,8 @@ thermal_shock = thermal_shock_index_advanced(Tmin_past, window_days=3)
         
         logger.info(f"Species analysis: {primary_species} ({primary_probability:.2f}) + {secondary_species} - {coexistence_scenario}")
         
-        
-        # Riferimento termico coerente (7+14 gg)
-        tmean7 = tmean_blend
-# Calcola lag per specie significative
-        species_lags = calculate_weighted_lag(species_probabilities, smi_current, thermal_shock, tmean_blend, vpd_current/10.0, cumulative_moisture_current)
+        # Calcola lag per specie significative
+        species_lags = calculate_weighted_lag(species_probabilities, smi_current, thermal_shock, tmean7, vpd_current/10.0, cumulative_moisture_current)
         
         # Eventi piovosi
         rain_events = detect_rain_events_multi_species(P_past + P_future, smi_series, month_current, elev_m, lat, cumulative_moisture_series, months_series)
@@ -1720,6 +1714,8 @@ thermal_shock = thermal_shock_index_advanced(Tmin_past, window_days=3)
         forecast_combined = [0.0] * future_days
         species_forecasts = {}
         flush_events_details = []
+        species_today_scores = {}
+        dominant_species_today = None
         
         for species, probability in species_probabilities.items():
             if probability < 0.05:  # Skip specie marginali
@@ -1742,18 +1738,12 @@ thermal_shock = thermal_shock_index_advanced(Tmin_past, window_days=3)
                     vpd_penalty = 1.0
                 
                 final_amplitude = base_amplitude * vpd_penalty
-                mpf = species_profile.get("min_precip_flush"
-                # Calcolo oggi (Giorno 0) con stessa pipeline
-                abs_day_today = past_days - 1
-                kernel_today = gaussian_kernel_advanced(abs_day_today, peak_idx, sigma, skewness=skew)
-                w_phen_today = phenology_weight(species, doy_today, elev_m)
-                today_value = 100.0 * final_amplitude * kernel_today * w_phen_today
-                species_today_scores[species] = species_today_scores.get(species, 0.0) + today_value
-    , 8.5)
+                
+                
+                mpf = species_profile.get("min_precip_flush", 8.5)
                 flush_scale = min(1.6, max(0.6, (event_mm / mpf) ** 0.85))
                 final_amplitude *= flush_scale
-                
-                # Step function per specie
+# Step function per specie
                 sigma = 2.2 if event_strength > 0.8 else 1.8
                 skew = 0.3 if species in ["aereus", "reticulatus"] else 0.1
                 
@@ -1799,12 +1789,7 @@ thermal_shock = thermal_shock_index_advanced(Tmin_past, window_days=3)
                     best_mean = window_mean
                     best_window = {"start": i, "end": i+2, "mean": int(round(window_mean))}
         
-        # Indice OGGI = Day 0 della specie dominante (coerente con le curve)
-        if species_today_scores:
-            dominant_species_today = max(species_today_scores.items(), key=lambda kv: kv[1])[0]
-            current_index = int(round(max(species_today_scores.values())))
-        else:
-            current_index = forecast_final[0] if forecast_final else 0
+        current_index = int(round(max(species_today_scores.values()))) if species_today_scores else (forecast_final[0] if forecast_final else 0)
         
         # Validazioni e confidence
         has_validations, validation_count, validation_accuracy = check_recent_validations_super_advanced(lat, lon)
@@ -1870,7 +1855,7 @@ thermal_shock = thermal_shock_index_advanced(Tmin_past, window_days=3)
             return {"avg_size": avg_size, "size_class": "Variabile", "size_range": overall_range}
 
         harvest_estimate, harvest_note = estimate_harvest_multi_species(current_index, species_probabilities, confidence_5d["overall"])
-        size_estimates = estimate_sizes_multi_species(flush_events_details, tmean_blend, rh_7d, species_probabilities)
+        size_estimates = estimate_sizes_multi_species(flush_events_details, tmean7, rh_7d, species_probabilities)
         
         processing_time = round((time.time() - start_time) * 1000, 1)
         
@@ -1917,7 +1902,7 @@ thermal_shock = thermal_shock_index_advanced(Tmin_past, window_days=3)
             
             # Multi-specie core
             "index": current_index,
-            "dominant_species_today": dominant_species_today,
+            "dominant_species_today": max(species_today_scores, key=species_today_scores.get) if species_today_scores else None,
             "forecast": forecast_final,
             "best_window": best_window,
             "confidence_detailed": confidence_5d,
