@@ -1681,7 +1681,10 @@ async def api_score_multi_species(
         cumulative_moisture_current = cumulative_moisture_series[past_days - 1] if past_days - 1 < len(cumulative_moisture_series) else 0.0
         
         tmean_7d = sum(Tmean_past[-7:]) / max(1, len(Tmean_past[-7:]))
-        thermal_shock = thermal_shock_index_advanced(Tmin_past, window_days=3)
+        # Nuovo: media termica su 14 giorni e blend 70/30
+        tmean_14d = sum(Tmean_past[-14:]) / max(1, len(Tmean_past[-14:])) if len(Tmean_past) >= 1 else tmean_7d
+        tmean_blend = 0.7 * tmean_7d + 0.3 * tmean_14d
+thermal_shock = thermal_shock_index_advanced(Tmin_past, window_days=3)
         rh_7d = sum(RH_past[-7:]) / max(1, len(RH_past[-7:]))
         vpd_series_future = [vpd_hpa(Tmean_future[i], RH_future[i]) for i in range(min(len(Tmean_future), len(RH_future)))]
         vpd_current = vpd_series_future[0] if vpd_series_future else 5.0
@@ -1704,9 +1707,11 @@ async def api_score_multi_species(
         
         logger.info(f"Species analysis: {primary_species} ({primary_probability:.2f}) + {secondary_species} - {coexistence_scenario}")
         
-        # Calcola lag per specie significative
-        species_lags = calculate_weighted_lag(species_probabilities, smi_current, thermal_shock, tmean_7d, 
-                                            vpd_current/10.0, cumulative_moisture_current)
+        
+        # Riferimento termico coerente (7+14 gg)
+        tmean7 = tmean_blend
+# Calcola lag per specie significative
+        species_lags = calculate_weighted_lag(species_probabilities, smi_current, thermal_shock, tmean_blend, vpd_current/10.0, cumulative_moisture_current)
         
         # Eventi piovosi
         rain_events = detect_rain_events_multi_species(P_past + P_future, smi_series, month_current, elev_m, lat, cumulative_moisture_series, months_series)
@@ -1865,7 +1870,7 @@ async def api_score_multi_species(
             return {"avg_size": avg_size, "size_class": "Variabile", "size_range": overall_range}
 
         harvest_estimate, harvest_note = estimate_harvest_multi_species(current_index, species_probabilities, confidence_5d["overall"])
-        size_estimates = estimate_sizes_multi_species(flush_events_details, tmean_7d, rh_7d, species_probabilities)
+        size_estimates = estimate_sizes_multi_species(flush_events_details, tmean_blend, rh_7d, species_probabilities)
         
         processing_time = round((time.time() - start_time) * 1000, 1)
         
