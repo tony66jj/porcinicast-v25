@@ -1824,22 +1824,59 @@ async def api_score_multi_species(
             era5_quality=era5_bonus
         )
         
-        # Harvest estimates
-        def estimate_harvest_multi_species(index, species_probs, confidence):
-            base_harvest = index * confidence
-            diversity_bonus = 1.0 + (len(species_probs) - 1) * 0.15  # Bonus diversità
-            total_harvest = base_harvest * diversity_bonus
+        # ===== MODIFICA RICHIESTA: INIZIO =====
+        def estimate_harvest_multi_species(index: int, confidence: float, hours_on_field: int, species_probs: dict) -> Tuple[str, str]:
+            """
+            Stima il raccolto qualitativo e quantitativo basato su potenziale del luogo, ore di ricerca e fiducia.
+            """
+            # 1. Calcola il potenziale intrinseco del luogo (indipendente dalle ore)
+            base_potential = index * confidence
+            diversity_bonus = 1.0 + (len(species_probs) - 1) * 0.15
+            spot_potential = base_potential * diversity_bonus
+
+            # 2. Mappa il potenziale a "funghi trovati per ora" (stima)
+            if spot_potential > 85:
+                finds_per_hour_min, finds_per_hour_max = 1.5, 3.0
+            elif spot_potential > 65:
+                finds_per_hour_min, finds_per_hour_max = 0.8, 1.8
+            elif spot_potential > 45:
+                finds_per_hour_min, finds_per_hour_max = 0.4, 1.0
+            elif spot_potential > 25:
+                finds_per_hour_min, finds_per_hour_max = 0.1, 0.6
+            else:
+                finds_per_hour_min, finds_per_hour_max = 0.0, 0.2
+
+            # 3. Calcola il numero di funghi attesi in base alle ore di ricerca
+            expected_min = int(round(finds_per_hour_min * hours_on_field))
+            expected_max = max(expected_min, int(round(finds_per_hour_max * hours_on_field)))
             
-            if total_harvest > 80: 
-                return "Eccellente", f"Ambiente ricco con {len(species_probs)} specie potenziali"
-            elif total_harvest > 60: 
-                return "Buono", f"Buone probabilità di raccolto diversificato"
-            elif total_harvest > 40: 
-                return "Moderato", f"Possibile raccolta con {primary_species} dominante"
-            elif total_harvest > 20: 
-                return "Scarso", "Condizioni subottimali"
-            else: 
-                return "Molto scarso", "Attendere condizioni migliori"
+            # Rendi il range più leggibile
+            if expected_min == expected_max:
+                mushroom_estimate_str = f"~{expected_min} porcini" if expected_min > 0 else "0-1 porcini"
+            elif expected_max > 15:
+                mushroom_estimate_str = f"{expected_min}+ porcini"
+            else:
+                mushroom_estimate_str = f"{expected_min}-{expected_max} porcini"
+
+            # 4. Determina l'etichetta qualitativa ("Buono", "Moderato", etc.)
+            # Questo score è aggiustato per le ore, per dare un'idea del risultato finale della ricerca
+            final_search_score = spot_potential * (hours_on_field / 4.0) # 4 ore = baseline
+            
+            if final_search_score > 90:
+                label = "Eccellente"
+            elif final_search_score > 65:
+                label = "Buono"
+            elif final_search_score > 40:
+                label = "Moderato"
+            elif final_search_score > 20:
+                label = "Scarso"
+            else:
+                label = "Molto scarso"
+                
+            # 5. Restituisci l'etichetta qualitativa e la stima quantitativa
+            return label, mushroom_estimate_str
+        
+        # ===== MODIFICA RICHIESTA: FINE =====
         
         def estimate_sizes_multi_species(events, tmean, rh, species_probs):
             # Media pesata delle taglie per specie presenti
@@ -1870,7 +1907,8 @@ async def api_score_multi_species(
             
             return {"avg_size": avg_size, "size_class": "Variabile", "size_range": overall_range}
 
-        harvest_estimate, harvest_note = estimate_harvest_multi_species(current_index, species_probabilities, confidence_5d["overall"])
+        # AGGIORNAMENTO CHIAMATA FUNZIONE
+        harvest_estimate, harvest_note = estimate_harvest_multi_species(current_index, confidence_5d["overall"], hours, species_probabilities)
         size_estimates = estimate_sizes_multi_species(flush_events_details, tmean7, rh_7d, species_probabilities)
         
         processing_time = round((time.time() - start_time) * 1000, 1)
