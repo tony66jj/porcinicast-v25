@@ -467,6 +467,7 @@
       <div style="width:100%;max-width:100%;overflow:hidden;position:relative;">
         <canvas id="chart" style="width:100%!important;height:350px!important;max-width:100%!important;"></canvas>
       </div>
+      <div style="margin-top:6px;color:var(--muted);font-size:11px;">Nota: l'asse X mostra le <strong>date</strong> (Europa/Roma). <strong>Oggi</strong> è la prima etichetta.</div>
       <div id="chart-error" style="display:none;" class="error-debug">
         Errore nel caricamento del grafico. Verifica la console per dettagli.
       </div>
@@ -895,6 +896,25 @@
       }
     }
 
+    // === Helpers per etichette data in IT ===
+    function formatDateShortIT(d){
+      const opts = { weekday: 'short', day: '2-digit', month: 'short' };
+      return d.toLocaleDateString('it-IT', opts).replaceAll('.', '');
+    }
+    function formatDateLongIT(d){
+      const opts = { weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' };
+      return d.toLocaleDateString('it-IT', opts);
+    }
+    function makeDateLabels(n){
+      const today = new Date();
+      const labels = [];
+      for(let i=0;i<n;i++){
+        const d = new Date(today.getFullYear(), today.getMonth(), today.getDate()+i);
+        labels.push((i===0? 'Oggi ' : '') + formatDateShortIT(d));
+      }
+      return labels;
+    }
+
     function updateChart(forecast, data = null) {
       debugLog('Updating multi-species chart:', forecast);
       if (!checkChartJS()) return;
@@ -909,7 +929,7 @@
           currentChart.destroy();
         }
         
-        const labels = forecast.map((_, i) => `Giorno ${i + 1}`);
+        const labels = makeDateLabels(forecast.length);
         const datasets = [];
         const speciesInfo = data?.species_analysis || {};
 
@@ -1006,6 +1026,17 @@
                 enabled: true,
                 mode: 'index',
                 intersect: false,
+                callbacks: {
+                  title: (items) => {
+                    try{
+                      const idx = items[0].dataIndex;
+                      const today = new Date();
+                      const d = new Date(today.getFullYear(), today.getMonth(), today.getDate()+idx);
+                      const pfx = (idx===0? 'Oggi, ' : '');
+                      return pfx + formatDateLongIT(d);
+                    }catch(e){ return items[0].label; }
+                  }
+                }
               }
             },
             scales: {
@@ -1300,4 +1331,3 @@
     });
   </script>
 </body>
-  </html>
