@@ -1536,6 +1536,140 @@ def build_analysis_multi_species_v30(payload: Dict[str, Any]) -> str:
             lines.append(f"<li><em>B. {species}</em>: {lag_days} giorni (range normale: {lag_range[0]}-{lag_range[1]} giorni)</li>")
         lines.append("</ul>")
         lines.append("<p><em>I lag sono calcolati considerando umidità suolo, shock termico, VPD stress e umidità cumulativa secondo letteratura scientifica</em></p>")
+
+        # === FINESTRE DI FRUTTIFICAZIONE: TESTI DINAMICI (NON CAMBIA LA LOGICA DEL MODELLO) ===
+        try:
+            fw_start = int(payload.get("fruiting_window_start", -1))
+            fw_end   = int(payload.get("fruiting_window_end", -1))
+            forecast = payload.get("forecast", []) or []
+            idx_today = int(payload.get("index", 0))
+            threshold = 15  # stessa soglia operativa della finestra
+
+            # Variabili ecologiche (solo per i consigli; non alterano il calcolo)
+            species_analysis = payload.get("species_analysis", {}) or {}
+            primary_species = (species_analysis.get("primary_species") or "reticulatus")
+            habitat_used    = (payload.get("habitat_used") or "")
+            aspect_oct      = (payload.get("aspect_octant") or "")
+            elev_m          = float(payload.get("elevation_m") or 0)
+
+            tmean7 = float(payload.get("Tmean7_c") or 0.0)
+            rh7    = float(payload.get("RH7_pct") or 0.0)
+            vpd    = float(payload.get("vpd_current_hpa") or 0.0)
+            api    = float(payload.get("API_star_mm") or 0.0)
+            smi    = float(payload.get("smi_current") or 0.0)
+            cum_mo = float(payload.get("cumulative_moisture_index") or 0.0)
+
+            lines.append("<h4>🪵 Finestra di Fruttificazione (dinamica)</h4>")
+
+            # Derivare fase anche dalla pendenza locale della curva (oggi vs domani/ieri)
+            slope = 0.0
+            if isinstance(forecast, list) and len(forecast) >= 2:
+                # pendenza diretta oggi->domani; se disponibile usa media centrata
+                if len(forecast) >= 3:
+                    slope = (forecast[1] - forecast[0]) * 0.6 + (forecast[1] - forecast[2]) * 0.4
+                else:
+                    slope = forecast[1] - forecast[0]
+
+            # Frase guida sulla forma della curva
+            curva_txt = ""
+            if slope > 3:
+                curva_txt = "curva in ascesa netta (fase di apertura)"
+            elif slope > 0.5:
+                curva_txt = "curva in leggera ascesa"
+            elif slope < -3:
+                curva_txt = "curva in calo rapido (fase di chiusura)"
+            elif slope < -0.5:
+                curva_txt = "curva in leggera discesa"
+            else:
+                curva_txt = "curva quasi stabile"
+
+            if fw_start >= 0 and fw_end >= fw_start:
+                durata = fw_end - fw_start + 1
+
+                # Fase della finestra in base alla posizione relativa e alla pendenza
+                if 0 < fw_start:
+                    fase = "in attesa dell'avvio"
+                elif 0 > fw_end:
+                    fase = "finestra conclusa"
+                else:
+                    # siamo dentro la finestra
+                    pos_rel = (0 - fw_start) / max(1.0, durata)
+                    if pos_rel < 1/3:
+                        fase = "fase iniziale"
+                    elif pos_rel < 2/3:
+                        fase = "pieno della finestra"
+                    else:
+                        fase = "fase finale"
+                    # affina con pendenza
+                    if slope < -0.5 and fase != "fase iniziale":
+                        fase = "fase finale (in chiusura)"
+                    elif slope > 0.5 and fase != "fase finale":
+                        fase = "fase iniziale (in apertura)"
+
+                # Testo riassuntivo
+                if fw_start <= 0 <= fw_end:
+                    giorni_restanti = max(0, fw_end)
+                    lines.append(
+                        f"<p><strong>Situazione attuale</strong>: {curva_txt}; sei nel <em>{fase}</em>. "
+                        f"La finestra rimarrà favorevole per altri ≈ {giorni_restanti} giorni.</p>"
+                    )
+                elif fw_start > 0:
+                    lines.append(
+                        f"<p><strong>Prossima finestra</strong>: inizio tra {fw_start} giorni; "
+                        f"durata prevista ≈ {durata} giorni.</p>"
+                    )
+                else:
+                    lines.append("<p><strong>Nessuna finestra attiva</strong> nei prossimi giorni secondo la soglia operativa.</p>")
+
+                # Consigli operativi dinamici basati sulle variabili del modello (non modificano i calcoli)
+                tips = []
+                # Umidità/VPD
+                if vpd > 12.0:
+                    tips.append("VPD alto: privilegia versanti ombreggiati (N–NE), impluvi, fondi valle e zone con lettiera spessa; sfrutta 24–48 h dopo le piogge.")
+                elif vpd < 6.0 and rh7 > 85:
+                    tips.append("Aria molto umida e stabile: estendi la ricerca a margini di radure e transizioni di copertura; attesi primordi diffusi.")
+                # Stato idrico del suolo
+                if smi < 0.35 and api < 6.0 and cum_mo < 10.0:
+                    tips.append("Suolo tendenzialmente asciutto: focalizzati su concavità, piedi di versante e microdepressioni con accumulo d'umidità.")
+                elif smi > 0.65 or cum_mo > 25.0:
+                    tips.append("Suolo molto umido / rischio di anossia locale: evita ristagni; preferisci dossi drenati e bordo-impluvio.")
+                # Termica
+                if 15.0 <= tmean7 <= 22.0:
+                    tips.append("Termica ottimale (15–22 °C): pianifica uscite mattina presto e tardo pomeriggio.")
+                elif tmean7 > 24.0:
+                    tips.append("Caldo elevato: cerca quota maggiore o esposizioni fresche; la finestra tende ad accorciarsi.")
+                elif tmean7 < 10.0:
+                    tips.append("Termica bassa: cerca esposizioni calde (S–SE) e zone a bassa ventilazione; finestra più lenta ma più lunga.")
+                # Esposizione/altitudine/habitat/specie
+                if aspect_oct in {"S","SE","SW"} and tmean7 > 20.0:
+                    tips.append("Esposizioni calde: anticipi di nascita ma maturazione rapida; verifica siti ogni 24–36 h.")
+                if primary_species in {"edulis","pinophilus"} and elev_m < 900:
+                    tips.append("Specie montane: aumenta la quota o spostati verso faggete/conifere per massimizzare la finestra.")
+                if primary_species in {"aereus","reticulatus"} and (habitat_used and "querc" in habitat_used.lower()):
+                    tips.append("Querceti: controlla margini luminosi e interfacce prato-bosco dopo temporali caldi.")
+                # Fase-specifico
+                if fw_start <= 0 <= fw_end:
+                    if "iniziale" in fase:
+                        tips.append("Fase iniziale: cerca primordi vicino a radici affioranti, tronchi caduti e sotto lettiera aerata; ritorna dopo 24–36 h.")
+                    elif "pieno" in fase:
+                        tips.append("Pieno della finestra: amplia il raggio; se l'indice supera 60, attesi più ritrovamenti/ora.")
+                    else:
+                        tips.append("Finale: sposta la ricerca in ombra e/o 100–200 m più in alto; cappelli più grandi ma radi.")
+                else:
+                    tips.append("In attesa della finestra: monitora precipitazioni efficaci (>8–10 mm/24–48 h) e VPD < 10 hPa per un avvio netto.")
+
+                if tips:
+                    lines.append("<ul style='margin:8px 0 0 20px'>")
+                    for t in tips[:6]:
+                        lines.append(f"<li>{t}</li>")
+                    lines.append("</ul>")
+
+            else:
+                lines.append("<p><strong>Nessuna finestra attiva</strong> nei prossimi 10 giorni secondo la soglia operativa.</p>")
+        except Exception as _e:
+            # non rompere il rendering in caso di problemi
+            pass
+
     
     # Note finali scientifiche
     lines.append("<h4>📚 Base Scientifica</h4>")
