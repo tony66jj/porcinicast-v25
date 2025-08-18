@@ -1536,129 +1536,241 @@ def build_analysis_multi_species_v30(payload: Dict[str, Any]) -> str:
             lines.append(f"<li><em>B. {species}</em>: {lag_days} giorni (range normale: {lag_range[0]}-{lag_range[1]} giorni)</li>")
         lines.append("</ul>")
         lines.append("<p><em>I lag sono calcolati considerando umidità suolo, shock termico, VPD stress e umidità cumulativa secondo letteratura scientifica</em></p>")
-        # === FINESTRA DI FRUTTIFICAZIONE: TESTI DINAMICI (retrodatazione inclusa; no cambio modello) ===
-        try:
-            from datetime import datetime, timedelta
-            def _it_date(d):
-                mesi = ['gennaio','febbraio','marzo','aprile','maggio','giugno','luglio','agosto','settembre','ottobre','novembre','dicembre']
-                return f"{d.day} {mesi[d.month-1]} {d.year}"
-            today = datetime.utcnow().date()
-            species_info = payload.get('species_analysis') or {}
-            species_forecasts = species_info.get('species_forecasts') or {}
-            species_probs = species_info.get('species_probabilities') or {}
-            primary_species = species_info.get('primary_species') or 'reticulatus'
-            flush_events = payload.get('flush_events') or []
-            # specie dominante oggi = max al tempo 0
-            dominant = None; best0 = -1.0
-            for sp, arr in species_forecasts.items():
-                if isinstance(arr, list) and len(arr)>0 and (arr[0] is not None):
-                    v0 = float(arr[0])
-                    if v0 > best0:
-                        best0 = v0; dominant = sp
-            if not dominant:
-                dominant = primary_species
-            lines.append('<h4>🪵 Finestra di Fruttificazione (dinamica)</h4>')
-            prob = species_probs.get(dominant, 0.0) if species_probs else 0.0
-            lines.append(f"<p><strong>Specie dominante oggi</strong>: <em>B. {dominant}</em>{' (prob. '+str(round(prob,2))+')' if species_probs else ''}.</p>")
-            arr = species_forecasts.get(dominant, [])
-            t_peak=None; v_peak=None; t_open=None; t_close=None; truncated_close=False
-            if isinstance(arr, list) and arr:
-                vals = [float(x) for x in arr if x is not None]
-                if vals:
-                    v_peak = max(vals)
-                    t_peak = arr.index(max(arr))
-                else:
-                    v_peak = 0.0
-                T_OPEN=25.0; T_CLOSE=18.0
-                thr_open = max(T_OPEN, 0.60*float(v_peak))
-                thr_close = max(T_CLOSE, 0.50*float(v_peak))
-                if t_peak is not None:
-                    for i in range(0, t_peak+1):
-                        vi = arr[i]
-                        if vi is not None and float(vi) >= thr_open:
-                            t_open = i; break
-                    for j in range(len(arr)-1, t_peak-1, -1):
-                        vj = arr[j]
-                        if vj is not None and float(vj) >= thr_close:
-                            t_close = j; break
-                    if t_close is None:
-                        span_left = t_peak - (t_open if t_open is not None else t_peak)
-                        t_close = t_peak + max(2, span_left)
-                        truncated_close = True
-                # retrodatazione apertura
+    # === FINESTRA DI FRUTTIFICAZIONE: TESTI DINAMICI (v2 plateau & bordo destro) ===
+    try:
+        from datetime import datetime, timedelta
+
+        def _it_date(d):
+            mesi = ['gennaio','febbraio','marzo','aprile','maggio','giugno','luglio','agosto','settembre','ottobre','novembre','dicembre']
+            return f"{d.day} {mesi[d.month-1]} {d.year}"
+
+        today = datetime.utcnow().date()
+        species_info = payload.get('species_analysis') or {}
+        species_forecasts = species_info.get('species_forecasts') or {}
+        species_probs = species_info.get('species_probabilities') or {}
+        primary_species = species_info.get('primary_species') or 'reticulatus'
+        flush_events = payload.get('flush_events') or []
+
+        # specie dominante oggi = massima pred al tempo 0
+        dominant = None; best0 = -1.0
+        for sp, arr in species_forecasts.items():
+            if isinstance(arr, list) and len(arr)>0 and (arr[0] is not None):
+                v0 = float(arr[0])
+                if v0 > best0:
+                    best0 = v0; dominant = sp
+        if not dominant:
+            dominant = primary_species
+
+        lines.append('<h4>🪵 Finestra di Fruttificazione (dinamica)</h4>')
+        prob = species_probs.get(dominant, 0.0) if species_probs else 0.0
+        lines.append(f"<p><strong>Specie dominante oggi</strong>: <em>B. {dominant}</em>{' (prob. '+str(round(prob,2))+')' if species_probs else ''}.</p>")
+
+        arr = species_forecasts.get(dominant, [])
+        t_peak=None; v_peak=None; t_open=None; t_close=None; truncated_close=False
+        peak_start=None; peak_end=None  # plateau vicino al picco
+        if isinstance(arr, list) and arr:
+            vals = [float(x) if x is not None else None for x in arr]
+            vals_nonnull = [x for x in vals if x is not None]
+            v_peak = max(vals_nonnull) if vals_nonnull else 0.0
+            t_peak = vals.index(v_peak) if v_peak is not None and v_peak in vals else 0
+
+            T_OPEN=25.0; T_CLOSE=18.0
+            thr_open = max(T_OPEN, 0.60*float(v_peak))
+            thr_close = max(T_CLOSE, 0.50*float(v_peak))
+
+            # apertura = primo indice >= thr_open prima del picco (compreso)
+            if v_peak is not None:
+                for i in range(0, t_peak+1):
+                    vi = vals[i]
+                    if vi is not None and vi >= thr_open:
+                        t_open = i; break
+
+            # chiusura "grezza" = ultimo indice >= thr_close dopo il picco
+            if v_peak is not None:
+                for j in range(len(vals)-1, t_peak-1, -1):
+                    vj = vals[j]
+                    if vj is not None and vj >= thr_close:
+                        t_close = j; break
+
+            # plateau del picco: segmento contiguo >= 0.9*picco
+            if v_peak and v_peak>0:
+                hi = 0.90*v_peak
+                # espandi a sinistra
+                ps = t_peak; pe = t_peak
+                k = t_peak-1
+                while k>=0 and vals[k] is not None and vals[k] >= hi:
+                    ps = k; k -= 1
+                k = t_peak+1
+                while k < len(vals) and vals[k] is not None and vals[k] >= hi:
+                    pe = k; k += 1
+                peak_start, peak_end = ps, pe
+
+            # Heuristiche di bordo destro: se ultimo/e punti restano alti, la chiusura è oltre l'orizzonte
+            last = vals[-1] if vals else None
+            last3 = [x for x in vals[-3:] if x is not None]
+            avg_last3 = sum(last3)/len(last3) if last3 else None
+            slope_last = None
+            if len(vals)>=2 and vals[-1] is not None and vals[-2] is not None:
+                slope_last = vals[-1] - vals[-2]
+
+            beyond = False
+            if v_peak and last is not None:
+                if last >= 0.85*v_peak:
+                    beyond = True
+                if avg_last3 is not None and avg_last3 >= 0.75*v_peak:
+                    beyond = True
+                if slope_last is not None and slope_last >= -0.5:
+                    beyond = True
+
+            # Retrodatazione apertura usando flush osservati
+            t_open_real_date = None
+            last_obs = None
+            for ev in flush_events:
+                if ev.get('observed'):
+                    if (not last_obs) or (ev.get('event_day_index', -10**9) > last_obs.get('event_day_index', -10**9)):
+                        last_obs = ev
+            try:
+                if last_obs:
+                    when_str = str(last_obs.get('event_when',''))
+                    ev_date = datetime.fromisoformat(when_str).date() if '-' in when_str else None
+                    ev_lag = int(last_obs.get('lag_days') or 0)
+                    if ev_date and ev_lag>0:
+                        t_open_real_date = ev_date + timedelta(days=int(round(0.8*ev_lag)))
+            except Exception:
                 t_open_real_date = None
-                last_obs = None
-                for ev in flush_events:
-                    if ev.get('observed'):
-                        if (not last_obs) or (ev.get('event_day_index', -10**9) > last_obs.get('event_day_index', -10**9)):
-                            last_obs = ev
-                try:
-                    if last_obs:
-                        when_str = str(last_obs.get('event_when',''))
-                        ev_date = datetime.fromisoformat(when_str).date() if '-' in when_str else None
-                        ev_lag = int(last_obs.get('lag_days') or 0)
-                        if ev_date and ev_lag>0:
-                            t_open_real_date = ev_date + timedelta(days=int(round(0.8*ev_lag)))
-                except Exception:
-                    t_open_real_date = None
-                if t_open_real_date is None:
-                    slope = 0.0
-                    if len(arr)>=2 and arr[0] is not None and arr[1] is not None:
-                        slope = float(arr[1]) - float(arr[0])
-                    if arr and arr[0] is not None and float(arr[0])>=thr_open and slope<0:
-                        denom = abs(slope) if abs(slope)>1e-3 else 1.0
-                        delta = int(round(min(3.0, max(1.0, (float(arr[0])-thr_open)/denom))))
-                        t_open_real_date = today - timedelta(days=delta)
-                parts = []
-                if t_open_real_date and t_open is not None and t_open==0 and t_open_real_date < today:
+
+            # Fallback: se oggi sopra soglia e pendenza negativa, apertura 1–3gg fa
+            if t_open_real_date is None:
+                slope = 0.0
+                if len(vals)>=2 and vals[0] is not None and vals[1] is not None:
+                    slope = vals[1] - vals[0]
+                if vals and vals[0] is not None and vals[0]>=thr_open and slope<0:
+                    denom = abs(slope) if abs(slope)>1e-3 else 1.0
+                    delta = int(round(min(3.0, max(1.0, (vals[0]-thr_open)/denom))))
+                    t_open_real_date = today - timedelta(days=delta)
+
+            # Costruzione messaggi
+            parts = []
+
+            # Apertura (reale o prevista)
+            if t_open_real_date and (t_open is None or t_open==0) and t_open_real_date < today:
+                days_ago = (today - t_open_real_date).days
+                parts.append(f"<strong>Apertura</strong>: già iniziata il {_it_date(t_open_real_date)} (≈ {days_ago} giorni fa)")
+            elif t_open is not None:
+                d = today + timedelta(days=int(t_open))
+                if t_open==0:
+                    parts.append(f"<strong>Apertura</strong>: oggi ({_it_date(d)})")
+                elif t_open<0:
+                    parts.append(f"<strong>Apertura</strong>: già avvenuta ({_it_date(d)})")
+                else:
+                    parts.append(f"<strong>Apertura</strong>: {_it_date(d)} (≈ tra {t_open} giorni)")
+            elif t_open_real_date:
+                if t_open_real_date <= today:
                     days_ago = (today - t_open_real_date).days
                     parts.append(f"<strong>Apertura</strong>: già iniziata il {_it_date(t_open_real_date)} (≈ {days_ago} giorni fa)")
-                elif t_open is not None:
-                    d = today + timedelta(days=int(t_open))
-                    if t_open==0:
-                        parts.append(f"<strong>Apertura</strong>: oggi ({_it_date(d)})")
+                else:
+                    days_to = (t_open_real_date - today).days
+                    parts.append(f"<strong>Apertura</strong>: {_it_date(t_open_real_date)} (≈ tra {days_to} giorni)")
+
+            # Picco (singolo o intervallo)
+            if peak_start is not None and peak_end is not None and peak_end>peak_start:
+                d1 = today + timedelta(days=int(peak_start))
+                d2 = today + timedelta(days=int(peak_end))
+                parts.append(f"<strong>Picco</strong>: {_it_date(d1)}–{_it_date(d2)} (plateau)")
+            elif t_peak is not None:
+                parts.append(f"<strong>Picco</strong>: {_it_date(today + timedelta(days=int(t_peak)))}")
+
+            # Chiusura con gestione bordo destro
+            if beyond:
+                parts.append("<strong>Chiusura</strong>: oltre l’orizzonte di 10 giorni (prosecuzione attesa)")
+                durata = None
+                if t_open is not None:
+                    durata = (len(vals)-1) - max(0, int(t_open))
+                if durata is not None and durata>=0:
+                    parts.append(f"<span class='muted'>Durata osservabile: ≥ {durata} giorni</span>")
+                    # Stima data di chiusura oltre l'orizzonte (fit lineare sulla coda se c'è calo)
+                    try:
+                        import math
+                        n = len(vals)
+                        k = 4 if n >= 4 else max(2, n-1)
+                        xs = list(range(n-k, n))
+                        ys = [vals[i] for i in xs]
+                        # forza monotonia decrescente sulla coda (se plateau, rimane invariata)
+                        for i in range(1, len(ys)):
+                            if ys[i] is not None and ys[i-1] is not None:
+                                ys[i] = min(ys[i], ys[i-1])
+                        # calcolo pendenza media
+                        deltas = []
+                        for i in range(1, len(ys)):
+                            if ys[i] is not None and ys[i-1] is not None:
+                                deltas.append(ys[i]-ys[i-1])
+                        slope = sum(deltas)/len(deltas) if deltas else 0.0  # valore giornaliero (negativo in discesa)
+                        # soglia di chiusura locale
+                        thr_local = thr_close
+                        lastv = vals[-1] if vals and vals[-1] is not None else v_peak
+                        extra = 0
+                        if slope < -0.5:  # discesa chiara
+                            extra = math.ceil( max(1.0, (lastv - thr_local) / abs(slope)) )
+                        else:
+                            # plateau o calo molto lento: estensione conservativa 2–5 giorni in funzione di quanto si è sopra soglia
+                            over = max(0.0, lastv - thr_local)
+                            if over >= 0.35*v_peak:
+                                extra = 5
+                            elif over >= 0.2*v_peak:
+                                extra = 4
+                            elif over >= 0.1*v_peak:
+                                extra = 3
+                            else:
+                                extra = 2
+                        d_est = today + timedelta(days=(n-1)+int(extra))
+                        parts.append(f"<span class='muted'>Stima chiusura</span>: {_it_date(d_est)} (oltre previsione, ±1–2g)")
+                    except Exception:
+                        pass
+    
+            elif t_close is not None:
+                d_close = today + timedelta(days=int(t_close))
+                durata = max(0, int(t_close) - max(0, int(t_open or 0)))
+                parts.append(f"<strong>Chiusura</strong>: {_it_date(d_close)} (≈ {durata} giorni di finestra)")
+
+            if parts:
+                lines.append('<p>'+ '. '.join(parts) +'.</p>')
+
+            # Fase odierna
+            fase = 'fuori finestra'
+            if t_open is not None and (t_close is not None or beyond):
+                eff_close = (t_close if not beyond else max(len(vals)-1, t_peak or 0))
+                if (t_open <= 0 <= eff_close):
+                    if v_peak and vals[0] is not None and vals[0] >= 0.95*float(v_peak):
+                        fase = 'pieno (plateau prolungato)' if beyond else 'pieno (picco oggi)'
                     else:
-                        parts.append(f"<strong>Apertura</strong>: {_it_date(d)} (≈ tra {t_open} giorni)")
-                elif t_open_real_date:
-                    if t_open_real_date <= today:
-                        days_ago = (today - t_open_real_date).days
-                        parts.append(f"<strong>Apertura</strong>: già iniziata il {_it_date(t_open_real_date)} (≈ {days_ago} giorni fa)")
-                    else:
-                        days_to = (t_open_real_date - today).days
-                        parts.append(f"<strong>Apertura</strong>: {_it_date(t_open_real_date)} (≈ tra {days_to} giorni)")
-                if t_peak is not None:
-                    parts.append(f"<strong>Picco</strong>: {_it_date(today + timedelta(days=int(t_peak)))}")
-                if t_close is not None:
-                    d_close = today + timedelta(days=int(t_close))
-                    if truncated_close or t_close>9:
-                        parts.append(f"<strong>Chiusura</strong>: ≈ {_it_date(d_close)} <em>(oltre l&#39;orizzonte di 10 giorni)</em>")
-                    else:
-                        durata = max(0, int(t_close) - max(0, int(t_open or 0)))
-                        parts.append(f"<strong>Chiusura</strong>: {_it_date(d_close)} (≈ {durata} giorni di finestra)")
-                if parts:
-                    lines.append('<p>'+ '. '.join(parts) +'.</p>')
-                fase = 'fuori finestra'
-                if t_open is not None and t_close is not None and (t_open <= 0 <= t_close):
-                    if v_peak and arr[0] is not None and float(arr[0]) >= 0.9*float(v_peak):
-                        fase = 'pieno (picco oggi)'
-                    else:
-                        rel = (0 - (t_open or 0)) / max(1.0, (t_close - (t_open or 0)))
-                        slope = 0.0
-                        if len(arr)>=2 and arr[0] is not None and arr[1] is not None:
-                            slope = float(arr[1]) - float(arr[0])
-                        if rel < 1/3 and slope >= 0:
+                        denom = max(1.0, (eff_close - (t_open or 0)))
+                        rel = (0 - (t_open or 0)) / denom
+                        slope0 = 0.0
+                        if len(vals)>=2 and vals[0] is not None and vals[1] is not None:
+                            slope0 = vals[1] - vals[0]
+                        if rel < 1/3 and slope0 >= 0:
                             fase = 'fase iniziale (in apertura)'
-                        elif rel < 2/3 and abs(slope) < 1.0:
+                        elif rel < 2/3 and abs(slope0) < 1.0:
                             fase = 'pieno (plateau)'
                         else:
                             fase = 'fase finale (in chiusura)'
                 elif (t_open is None or t_open>0):
                     fase = 'pre-finestra (rampa)'
-                lines.append(f"<p><strong>Situazione oggi</strong>: {fase}.</p>")
-        except Exception:
-            lines.append("<p class='muted'>[Nota: impossibile calcolare i dettagli dinamici della finestra in questa istanza]</p>")
-        # === FINE BLOCCO DINAMICO ===
-    
+            lines.append(f"<p><strong>Situazione oggi</strong>: {fase}.</p>")
+
+            # Consigli sintetici
+            tips = []
+            if beyond or (v_peak and vals[0] is not None and vals[0] >= 0.9*v_peak):
+                tips.append("Plateau alto: verifica siti ogni 24–36 h; privilegia microdepressioni umide e margini prato-bosco")
+            if t_open is not None and t_open>0:
+                tips.append("In attesa dell’apertura: monitorare precipitazioni efficaci (>8–10 mm/24–48 h) per un avvio netto")
+            tips.append("Se caldo secco/VPD alto: preferisci versanti N–NE e prime ore del mattino")
+            if tips:
+                lines.append("<ul>" + "".join([f"<li>{t}</li>" for t in tips]) + "</ul>")
+
+    except Exception as _ex:
+                    lines.append("<p class='muted'>[Nota: impossibile calcolare i dettagli dinamici della finestra in questa istanza]</p>")
+            # === FINE BLOCCO DINAMICO ===    
     # Note finali scientifiche
     lines.append("<h4>📚 Base Scientifica</h4>")
     lines.append("<p><em>Questo modello integra evidenze da:</em></p>")
