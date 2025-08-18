@@ -2182,3 +2182,7 @@ async def validation_stats_multi_species():
     except Exception as e: return {"error": str(e)}
 
 if __name__ == "__main__":
+    import os
+    import uvicorn
+    port = int(os.getenv("PORT", "8000"))
+    uvicorn.run(app, host="0.0.0.0", port=port)
