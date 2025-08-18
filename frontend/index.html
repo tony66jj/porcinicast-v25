@@ -896,25 +896,6 @@
       }
     }
 
-    <!-- Helpers per etichette di data in italiano -->
-    <script>
-    function formatDateShortIT(d){
-      return d.toLocaleDateString('it-IT', { weekday: 'short', day: '2-digit', month: 'short' }).replaceAll('.', '');
-    }
-    function formatDateLongIT(d){
-      return d.toLocaleDateString('it-IT', { weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' });
-    }
-    function makeDateLabels(n){
-      const today = new Date();
-      const labels = [];
-      for(let i=0;i<n;i++){
-        const d = new Date(today.getFullYear(), today.getMonth(), today.getDate()+i);
-        labels.push((i===0? 'Oggi ' : '') + formatDateShortIT(d));
-      }
-      return labels;
-    }
-    </script>
-
     function updateChart(forecast, data = null) {
       debugLog('Updating multi-species chart:', forecast);
       if (!checkChartJS()) return;
@@ -929,7 +910,13 @@
           currentChart.destroy();
         }
         
-        const labels = makeDateLabels(forecast.length);
+        const today = new Date();
+const labels = forecast.map((_, i) => {
+  const d = new Date(today.getFullYear(), today.getMonth(), today.getDate()+i);
+  const wd = d.toLocaleDateString('it-IT', { weekday: 'short' }).replaceAll('.', '');
+  const dm = d.toLocaleDateString('it-IT', { day: '2-digit', month: 'short' }).replaceAll('.', '');
+  return (i===0 ? 'Oggi ' : '') + `${wd} ${dm}`;
+});
         const datasets = [];
         const speciesInfo = data?.species_analysis || {};
 
@@ -1028,12 +1015,12 @@
                 intersect: false,
                 callbacks: {
                   title: (items) => {
-                    try {
+                    try{
                       const idx = items[0].dataIndex;
                       const today = new Date();
                       const d = new Date(today.getFullYear(), today.getMonth(), today.getDate()+idx);
-                      const pfx = (idx===0? 'Oggi, ' : '');
-                      return pfx + formatDateLongIT(d);
+                      const pfx = (idx===0 ? 'Oggi, ' : '');
+                      return pfx + d.toLocaleDateString('it-IT', { weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' });
                     } catch(e){ return ''; }
                   }
                 }
