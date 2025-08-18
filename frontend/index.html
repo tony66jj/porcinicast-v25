@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="it">
 <head>
-  <meta charset="utf-8" />
+  <meta charset="utf-g" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>BoletusLab® – Sistema Previsionale Micologico Multi-Specie</title>
   
@@ -282,29 +282,9 @@
       gap: 8px;
     }
     
-    .anossia-warning {
-      background: #2d1b1b;
-      border-left: 4px solid #ff6b6b;
-      padding: 10px;
-      margin: 10px 0;
-      border-radius: 4px;
-    }
-    
-    .fruiting-window-info {
-      background: #0e1419;
-      border: 1px solid #62d5b4;
-      border-radius: 8px;
-      padding: 12px;
-      margin-top: 12px;
-    }
-    
-    .fruiting-window-info strong {
-      color: var(--accent);
-    }
-    
     @media (max-width: 768px) {
       .controls{grid-template-columns:1fr;gap:8px}
-      .grid.g3, .grid.g4{grid-template-columns:1fr 1fr}
+      .grid.g3, .grid.g4{grid-template-columns:1fr 1fr} /* Modificato per gestire g4 */
       .input-group{flex-direction:column;align-items:stretch}
       .crowdsource .grid.g2{grid-template-columns:1fr}
       #map{height:280px}
@@ -312,7 +292,7 @@
       .panel{overflow:hidden}
       .species-legend{flex-direction:column;gap:8px}
     }
-    @media (max-width: 480px) {
+    @media (max-width: 480px) { /* Aggiunto per schermi ancora più piccoli */
         .grid.g4 { grid-template-columns: 1fr; }
     }
   </style>
@@ -321,9 +301,9 @@
   <div class="wrap">
     <header>
       <h1>🍄 BoletusLab® – Sistema Previsionale Micologico Multi-Specie</h1>
-      <span class="badge version-badge">v2.5.7</span>
+      <span class="badge version-badge">v2.5.8</span>
       <span class="badge scientific-badge">Algoritmi Scientifici Boletus spp.</span>
-      <span class="badge">Curve Sovrapposte</span>
+      <span class="badge">Finestra di Fruttificazione Evidenziata</span>
     </header>
 
     <div class="panel">
@@ -408,14 +388,13 @@
         <div id="map"></div>
     </div>
 
-    <div class="grid g4">
-      <div class="panel section">
+    <div class="grid g4"> <div class="panel section">
         <h3>🎯 Indice Oggi</h3>
         <div class="metric"><div class="k">Forza flush</div><div id="k-index" class="v">—</div></div>
         <div class="hr"></div>
         <div class="metric"><div class="k">Finestra migliore</div><div id="k-window" class="v">—</div></div>
         <div style="margin-top:8px;">
-          <span id="k-model-version" class="chip">v2.5.7</span>
+          <span id="k-model-version" class="chip">v2.5.8</span>
           <span id="k-has-validations" class="chip">validazioni: —</span>
         </div>
         <div id="species-info" style="margin-top:12px;">
@@ -474,16 +453,16 @@
     </div>
 
     <div class="panel section">
-      <h3>📈 Previsione Multi-Specie con Curve Sovrapposte</h3>
+      <h3>📈 Previsione Multi-Specie con Finestra di Fruttificazione</h3>
       <div style="margin-bottom:8px;color:var(--muted);font-size:12px;">
-        ✨ <strong>BoletusLab v2.5.7:</strong> Curve probabilistiche per specie coesistenti • Lag specie-specifico • Algoritmi basati su letteratura scientifica
+        ✨ <strong>BoletusLab v2.5.8:</strong> L'area colorata evidenzia l'intera finestra di fruttificazione, dal primo giorno di nascite fino all'ultimo.
       </div>
       
       <div id="species-legend" class="species-legend" style="display:none;">
         </div>
       
       <div class="lag-explanation" id="lag-explanation" style="display:none;">
-        💡 <strong>Fruttificazione Step-Function Multi-Specie:</strong> Curve sovrapposte mostrano timing diversi basati su lag biologico specie-specifico secondo letteratura scientifica.
+        💡 <strong>Finestra di Fruttificazione:</strong> L'area evidenziata mostra il periodo completo in cui è prevista la nascita di funghi.
       </div>
       <div style="width:100%;max-width:100%;overflow:hidden;position:relative;">
         <canvas id="chart" style="width:100%!important;height:350px!important;max-width:100%!important;"></canvas>
@@ -494,7 +473,7 @@
     </div>
 
     <div class="panel section">
-      <h3>🧭 Analisi Biologica Scientifica Dettagliata v2.5.7</h3>
+      <h3>🧭 Analisi Biologica Scientifica Dettagliata v2.5.8</h3>
       <div id="field-analysis" class="field-analysis">
         <p class="muted">Esegui un'analisi per vedere i dettagli scientifici con algoritmi BoletusLab.</p>
       </div>
@@ -586,7 +565,7 @@
 
     
 <footer>
-  <p>🍄 <strong>BoletusLab® v2.5.7</strong> — Sistema previsionale micologico multi-specie per fruttificazione <em>Boletus</em> spp.</p>
+  <p>🍄 <strong>BoletusLab® v2.5.8</strong> – Sistema previsionale micologico multi-specie per fruttificazione <em>Boletus</em> spp.</p>
   <p><strong>Tecnologie:</strong> Sistema meteorologico ibrido Visual Crossing + Open-Meteo + ERA5-Land • Curve sovrapposte per coesistenza specie • Lag biologico specie-specifico • Umidità cumulativa</p>
   <p><strong>Base scientifica:</strong> Mumcu Küçüker (2019), Martínez-Peña et al. (2012), Parladé et al. (2017), Tahvanainen et al. (2016), de la Varga et al. (2013), Viitanen (1997)</p>
   <p><strong>Sviluppato da Antonio Pio D'Aloia</strong> • FastAPI • NumPy/SciPy • SQLite • Docker • Machine Learning • Leaflet.js</p>
@@ -599,7 +578,6 @@
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@3.9.1/dist/chart.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@2.2.1/dist/chartjs-plugin-annotation.min.js"></script>
 
   <script>
     // === GLOBAL STATE ===
@@ -935,6 +913,35 @@
         const datasets = [];
         const speciesInfo = data?.species_analysis || {};
 
+        // ===== NUOVA LOGICA per EVIDENZIARE la FINESTRA DI FRUTTIFICAZIONE =====
+        if (data && data.fruiting_window_start > -1 && data.fruiting_window_end > -1) {
+          const backgroundData = new Array(forecast.length).fill(null);
+          for (let i = data.fruiting_window_start; i <= data.fruiting_window_end; i++) {
+            backgroundData[i] = 100; // Altezza massima del grafico
+          }
+          datasets.push({
+            type: 'bar',
+            label: 'Finestra di Fruttificazione',
+            data: backgroundData,
+            backgroundColor: 'rgba(102, 226, 138, 0.2)',
+            borderColor: 'rgba(102, 226, 138, 0.3)',
+            borderWidth: 1,
+            barPercentage: 1.0,
+            categoryPercentage: 1.0,
+            order: 1, // Disegna dietro le linee
+            xAxisID: 'x',
+            yAxisID: 'y',
+            // Disabilita interazioni per questo dataset
+            pointHoverRadius: 0,
+            tooltips: { enabled: false }
+          });
+          const lagExplanation = document.getElementById('lag-explanation');
+          if (lagExplanation) lagExplanation.style.display = 'block';
+        } else {
+            document.getElementById('lag-explanation').style.display = 'none';
+        }
+        // ===== FINE NUOVA LOGICA =====
+
         // GESTIONE MULTI-SPECIE
         if (speciesInfo.species_forecasts && Object.keys(speciesInfo.species_forecasts).length > 1) {
           const speciesProbabilities = speciesInfo.species_probabilities || {};
@@ -944,121 +951,37 @@
             if (probability < 0.1) return;
             
             const color = SPECIES_COLORS[species] || SPECIES_COLORS.mixed;
-            const alpha = 0.3 + (probability * 0.5);
             
             datasets.push({
+              type: 'line',
               label: `🍄 B. ${species} (${Math.round(probability * 100)}%)`,
               data: speciesForecast,
               borderColor: color,
-              backgroundColor: color + Math.floor(alpha * 255).toString(16).padStart(2, '0'),
+              backgroundColor: color + '26',
               borderWidth: 3, fill: true, tension: 0.2,
               pointBackgroundColor: color, pointBorderColor: '#ffffff',
-              pointBorderWidth: 2, pointRadius: 5, pointHoverRadius: 8
+              pointBorderWidth: 2, pointRadius: 5, pointHoverRadius: 8,
+              order: 0 // Disegna sopra lo sfondo
             });
           });
           
-          const lagExplanation = document.getElementById('lag-explanation');
-          if (lagExplanation) {
-            lagExplanation.innerHTML = `💡 <strong>Curve Sovrapposte Multi-Specie:</strong> Ogni curva rappresenta una specie che reagisce in modo diverso alla pioggia, con tempistiche di fruttificazione uniche. Le zone colorate indicano le finestre di fruttificazione effettiva.`;
-            lagExplanation.style.display = 'block';
-          }
-          
         } else {
-          // GESTIONE SPECIE SINGOLA
-          const species = speciesInfo.primary_species || 'reticulatus';
+          // GESTIONE SPECIE SINGOLA (CON BUG CORRETTO)
+          const species = speciesInfo.primary_species || 'reticulatus'; // <-- BUG CORRETTO QUI
           const color = SPECIES_COLORS[species] || SPECIES_COLORS.mixed;
           
           datasets.push({
-            label: `🍄 ${prettySpeciesName(species)} (Dominante)`,
+            type: 'line',
+            label: `🍄 ${prettySpeciesName(species)} (Dominante)`, // Etichetta corretta
             data: forecast,
             borderColor: color,
             backgroundColor: color + '26',
             borderWidth: 3, fill: true, tension: 0.2,
             pointBackgroundColor: color, pointBorderColor: '#ffffff',
-            pointBorderWidth: 2, pointRadius: 5, pointHoverRadius: 8
+            pointBorderWidth: 2, pointRadius: 5, pointHoverRadius: 8,
+            order: 0 // Disegna sopra lo sfondo
           });
-          document.getElementById('lag-explanation').style.display = 'none';
         }
-        
-        // CALCOLA ZONE DI FRUTTIFICAZIONE EFFETTIVA
-        const annotations = {};
-        let boxCount = 0;
-        
-        // Trova tutte le finestre di fruttificazione (indice > 25 per almeno 2 giorni consecutivi)
-        let inWindow = false;
-        let windowStart = -1;
-        const threshold = 25; // Soglia minima per considerare fruttificazione reale
-        
-        for (let i = 0; i < forecast.length; i++) {
-          if (forecast[i] > threshold && !inWindow) {
-            // Inizio finestra
-            windowStart = i;
-            inWindow = true;
-          } else if ((forecast[i] <= threshold || i === forecast.length - 1) && inWindow) {
-            // Fine finestra
-            let windowEnd = forecast[i] > threshold ? i : i - 1;
-            
-            // Aggiungi zona colorata solo se la finestra dura almeno 2 giorni
-            if (windowEnd - windowStart >= 1) {
-              boxCount++;
-              
-              // Determina il colore in base all'intensità media nella finestra
-              const windowValues = forecast.slice(windowStart, windowEnd + 1);
-              const avgIntensity = windowValues.reduce((a, b) => a + b, 0) / windowValues.length;
-              
-              let boxColor, boxLabel;
-              if (avgIntensity > 60) {
-                boxColor = 'rgba(102, 226, 138, 0.15)'; // Verde forte
-                boxLabel = 'Ottimale';
-              } else if (avgIntensity > 40) {
-                boxColor = 'rgba(139, 183, 255, 0.15)'; // Blu
-                boxLabel = 'Buona';
-              } else {
-                boxColor = 'rgba(255, 197, 87, 0.15)'; // Giallo
-                boxLabel = 'Moderata';
-              }
-              
-              annotations[`box${boxCount}`] = {
-                type: 'box',
-                xMin: windowStart - 0.3,
-                xMax: windowEnd + 0.3,
-                backgroundColor: boxColor,
-                borderColor: boxColor.replace('0.15', '0.4'),
-                borderWidth: 1,
-                label: {
-                  content: `Finestra ${boxLabel}`,
-                  enabled: true,
-                  position: 'start',
-                  color: 'rgba(255, 255, 255, 0.7)',
-                  font: {
-                    size: 10,
-                    style: 'italic'
-                  }
-                }
-              };
-            }
-            inWindow = false;
-          }
-        }
-        
-        // Aggiungi sempre la linea di soglia
-        annotations.line1 = {
-          type: 'line',
-          yMin: 30,
-          yMax: 30,
-          borderColor: 'rgba(255, 255, 255, 0.25)',
-          borderWidth: 2,
-          borderDash: [5, 5],
-          label: {
-            content: 'Soglia Ottimale (>30)',
-            enabled: true,
-            position: 'end',
-            color: 'rgba(255, 255, 255, 0.6)',
-            font: {
-              size: 11
-            }
-          }
-        };
         
         currentChart = new Chart(ctx, {
           type: 'line',
@@ -1070,10 +993,19 @@
             plugins: { 
               legend: { 
                 display: true, position: 'top',
-                labels: { color: '#8aa0b6', font: { size: 12 } }
+                labels: { 
+                  color: '#8aa0b6', 
+                  font: { size: 12 },
+                  // Nasconde la legenda per la finestra di fruttificazione
+                  filter: (legendItem, chartData) => {
+                    return legendItem.datasetIndex !== 0 || datasets[0].type !== 'bar';
+                  }
+                }
               },
-              annotation: {
-                annotations: annotations
+              tooltip: {
+                enabled: true,
+                mode: 'index',
+                intersect: false,
               }
             },
             scales: {
@@ -1152,110 +1084,7 @@
       try {
         const analysisDiv = document.getElementById('field-analysis');
         if (data.dynamic_explanation) {
-          // Aggiungi informazioni sulla finestra di fruttificazione
-          let enhancedExplanation = data.dynamic_explanation;
-          
-          // Calcola finestra di fruttificazione effettiva (>30)
-          const forecast = data.forecast || [];
-          let fruitingWindowHTML = '';
-          
-          // Trova finestra attuale
-          let currentWindowStatus = "Non attiva";
-          let currentPhase = "";
-          let nextWindowStart = -1;
-          let nextWindowDuration = 0;
-          let nextWindowReliability = "";
-          
-          if (forecast[0] > 30) {
-            // Siamo in una finestra attiva
-            let windowEnd = forecast.findIndex(v => v < 30);
-            if (windowEnd === -1) windowEnd = forecast.length;
-            
-            // Calcola fase basata sul massimo nella finestra
-            let maxInWindow = Math.max(...forecast.slice(0, windowEnd));
-            let currentRatio = forecast[0] / maxInWindow;
-            
-            if (currentRatio < 0.4) currentPhase = " - Fase: iniziale (crescita)";
-            else if (currentRatio > 0.7) currentPhase = " - Fase: finale (declino)";
-            else currentPhase = " - Fase: centrale (picco produttivo)";
-            
-            currentWindowStatus = `Attiva (giorni 1-${windowEnd})`;
-          } else {
-            // Cerca prossima finestra
-            nextWindowStart = forecast.findIndex(v => v > 30);
-            if (nextWindowStart > 0) {
-              let windowEnd = forecast.findIndex((v, i) => i > nextWindowStart && v < 30);
-              if (windowEnd === -1) windowEnd = forecast.length;
-              nextWindowDuration = windowEnd - nextWindowStart;
-              
-              // Determina affidabilità basata su eventi pioggia
-              const flushEvents = data.flush_events || [];
-              const triggerEvent = flushEvents.find(e => {
-                const lagDays = e.lag_days || 8;
-                const eventDay = e.event_day_index || 0;
-                return Math.abs((eventDay + lagDays - 20) - nextWindowStart) < 2;
-              });
-              
-              if (triggerEvent && triggerEvent.observed) {
-                nextWindowReliability = " (basata su pioggia già avvenuta - affidabile)";
-              } else {
-                nextWindowReliability = " (basata su previsioni meteo - da confermare)";
-              }
-            }
-          }
-          
-          // Inserisci info finestra dopo il lag biologico
-          const lagSectionIndex = enhancedExplanation.indexOf('</ul>', enhancedExplanation.indexOf('Lag Biologico'));
-          if (lagSectionIndex > -1) {
-            fruitingWindowHTML = `
-              </ul>
-              <div class="fruiting-window-info">
-                <p><strong>🎯 Finestra di Fruttificazione Effettiva (indice >30/100)</strong>:</p>
-                <ul style='margin:8px 0 0 20px'>
-                  <li><strong>Stato attuale</strong>: ${currentWindowStatus}${currentPhase}</li>
-                  <li><strong>Prossima finestra</strong>: ${
-                    nextWindowStart > 0 
-                      ? `Inizio tra ${nextWindowStart} giorni (durata stimata: ${nextWindowDuration} giorni)${nextWindowReliability}`
-                      : 'Non prevista nei prossimi 10 giorni'
-                  }</li>
-                </ul>
-                <p><em>Nota: La curva mostra il potenziale biologico graduale, mentre la finestra effettiva (>30) indica il periodo ottimale per la raccolta.</em></p>
-              </div>
-              <ul style='margin:0'>`;
-            
-            enhancedExplanation = enhancedExplanation.slice(0, lagSectionIndex) + fruitingWindowHTML + enhancedExplanation.slice(lagSectionIndex + 5);
-          }
-          
-          // Aggiungi warning anossia se necessario
-          const weatherPast = data.weather_past || {};
-          const weatherFuture = data.weather_future || {};
-          
-          // Calcola pioggia cumulativa ultimi 7 giorni
-          const pastDates = Object.keys(weatherPast).slice(-7);
-          const rain7Days = pastDates.reduce((sum, date) => sum + (weatherPast[date]?.precipitation_mm || 0), 0);
-          
-          // Calcola pioggia prevista prossimi 3 giorni
-          const futureDates = Object.keys(weatherFuture).slice(0, 3);
-          const rain3DaysFuture = futureDates.reduce((sum, date) => sum + (weatherFuture[date]?.precipitation_mm || 0), 0);
-          
-          if (rain7Days > 150 || rain3DaysFuture > 100) {
-            const conditionsIndex = enhancedExplanation.indexOf('<h4>🌡️ Condizioni Ambientali e Timing</h4>');
-            if (conditionsIndex > -1) {
-              const insertPoint = enhancedExplanation.indexOf('</ul>', conditionsIndex) + 5;
-              const anossiaWarning = `
-                <div class="anossia-warning">
-                  <strong>⚠️ Attenzione Eccesso Idrico</strong>: ${rain7Days.toFixed(1)}mm negli ultimi 7 giorni${
-                    rain3DaysFuture > 100 ? ` + ${rain3DaysFuture.toFixed(1)}mm previsti nei prossimi 3 giorni` : ''
-                  }.<br>
-                  Rischio anossia radicale del micelio. La fruttificazione potrebbe essere compromessa o ritardata nonostante le condizioni apparentemente favorevoli.
-                  Cerca in zone ben drenate e pendii dove l'acqua non ristagna.
-                </div>`;
-              
-              enhancedExplanation = enhancedExplanation.slice(0, insertPoint) + anossiaWarning + enhancedExplanation.slice(insertPoint);
-            }
-          }
-          
-          analysisDiv.innerHTML = enhancedExplanation;
+          analysisDiv.innerHTML = data.dynamic_explanation;
         } else {
           analysisDiv.innerHTML = '<p class="muted">Analisi dettagliata non disponibile.</p>';
         }
@@ -1423,7 +1252,7 @@
     
     // === INIZIALIZZAZIONE ===
     document.addEventListener('DOMContentLoaded', function() {
-      debugLog('🔄 DOM loaded, initializing BoletusLab Multi-Species v2.5.7...');
+      debugLog('🔄 DOM loaded, initializing BoletusLab Multi-Species v2.5.8...');
       
       try {
         map = L.map('map').setView([42.5, 12.5], 6);
@@ -1471,4 +1300,4 @@
     });
   </script>
 </body>
-</html>
+  </html>
