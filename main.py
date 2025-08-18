@@ -1,8 +1,8 @@
 from fastapi import FastAPI, Query, HTTPException, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 import os, httpx, math, asyncio, tempfile, time, sqlite3, logging
-from typing import Any, Dict, List, Optional, Tuple, NamedTuple
-from datetime import datetime, timezone, timedelta, date
+from typing import Any, Dict, List, Optional, Tuple
+from datetime import datetime, timezone, timedelta
 import json
 
 # Import avanzati con fallback
@@ -84,9 +84,9 @@ def blend_to_neutral(value: float, neutral: float = 1.0, weight: float = 0.35) -
         return value
 
 app = FastAPI(
-    title="BoletusLab® v3.4.0 - Rilevamento Multi-Finestra & Budget Idrico",
-    version="3.4.0",
-    description="Sistema avanzato con data di chiusura intelligente basata su budget idrico/hazard e riconoscimento di finestre multiple."
+    title="BoletusLab® v3.2.1 - Finestra di Fruttificazione Dinamica",
+    version="3.2.1",
+    description="Sistema multi-specie con durata della buttata variabile in base a specie, temperatura e VPD e visualizzazione finestra completa."
 )
 
 app.add_middleware(
@@ -97,7 +97,7 @@ app.add_middleware(
     allow_credentials=True
 )
 
-HEADERS = {"User-Agent":"BoletusLab/3.4.0 (+scientific)", "Accept-Language":"it"}
+HEADERS = {"User-Agent":"BoletusLab/3.2.1 (+scientific)", "Accept-Language":"it"}
 CDS_API_URL = os.environ.get("CDS_API_URL", "https://cds.climate.copernicus.eu/api")
 CDS_API_KEY = os.environ.get("CDS_API_KEY", "")
 
@@ -130,7 +130,7 @@ def init_database():
                 notes TEXT,
                 habitat_observed TEXT,
                 predicted_score INTEGER,
-                model_version TEXT DEFAULT '3.4.0',
+                model_version TEXT DEFAULT '3.2.1',
                 coexistence_predicted BOOLEAN DEFAULT FALSE,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 geohash TEXT
@@ -148,7 +148,7 @@ def init_database():
                 habitat_searched TEXT,
                 notes TEXT,
                 predicted_score INTEGER,
-                model_version TEXT DEFAULT '3.4.0',
+                model_version TEXT DEFAULT '3.2.1',
                 search_thoroughness INTEGER DEFAULT 3,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 geohash TEXT
@@ -168,7 +168,7 @@ def init_database():
                 habitat TEXT,
                 confidence_data TEXT,
                 weather_data TEXT,
-                model_version TEXT DEFAULT '3.4.0',
+                model_version TEXT DEFAULT '3.2.1',
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 geohash TEXT
             )
@@ -561,9 +561,9 @@ SPECIES_PROFILES_V30 = {
         "lag_base": 8.5, "lag_range": (6, 11),
         "vpd_sens": 1.15, "drought_tolerance": 0.8,
         "elevation_opt": (200, 1200),
-        "min_precip_flush": 10.5,
+        "min_precip_flush": 10.5, # Soglia alta, specie termofila
         "humidity_requirement": 85.0,
-        "drought_days_limit": 4, # Specie termofila, tollera più giorni di stress idrico
+        "geographic_preference": "mediterraneo",
         "description": "Porcino Nero, termofilo, preferisce querce e zone calde e secche"
     },
     "reticulatus": {
@@ -573,9 +573,9 @@ SPECIES_PROFILES_V30 = {
         "lag_base": 7.8, "lag_range": (5, 10),
         "vpd_sens": 1.0, "drought_tolerance": 0.9,
         "elevation_opt": (100, 1300),
-        "min_precip_flush": 9.0,
+        "min_precip_flush": 9.0, # Soglia intermedia
         "humidity_requirement": 80.0,
-        "drought_days_limit": 3,
+        "geographic_preference": "temperato_caldo",
         "description": "Porcino Estivo, comune in faggete estive e querceti"
     },
     "edulis": {
@@ -585,9 +585,9 @@ SPECIES_PROFILES_V30 = {
         "lag_base": 10.2, "lag_range": (8, 14),
         "vpd_sens": 1.2, "drought_tolerance": 0.6,
         "elevation_opt": (500, 2000),
-        "min_precip_flush": 7.5,
+        "min_precip_flush": 7.5, # Soglia bassa, ama l'umidità
         "humidity_requirement": 90.0,
-        "drought_days_limit": 2, # Specie igrofila, soffre subito la siccità
+        "geographic_preference": "temperato_fresco",
         "description": "Porcino Classico autunnale, ama il fresco e l'umido di faggi e abeti"
     },
     "pinophilus": {
@@ -597,9 +597,9 @@ SPECIES_PROFILES_V30 = {
         "lag_base": 9.3, "lag_range": (7, 12),
         "vpd_sens": 0.9, "drought_tolerance": 1.1,
         "elevation_opt": (400, 1800),
-        "min_precip_flush": 8.5,
+        "min_precip_flush": 8.5, # Soglia medio-bassa
         "humidity_requirement": 85.0,
-        "drought_days_limit": 3,
+        "geographic_preference": "coniferato",
         "description": "Porcino dei pini, legato a terreni acidi e ben drenati"
     }
 }
@@ -618,45 +618,68 @@ def calculate_species_probabilities(habitat_used: str, month: int, elev_m: float
     h = (habitat_used or "misto").lower()
 
     if h == "faggio":
+        # Nelle faggete, solo edulis o reticulatus.
+        # Li distinguiamo in base a stagione e altitudine per una stima più accurata.
         score_edulis = 1.0
         score_reticulatus = 1.0
+        
+        # B. edulis è tipicamente più tardivo (autunnale) e di alta quota.
         if month >= 9: score_edulis *= 1.5
         if elev_m > 1100: score_edulis *= 1.5
+        
+        # B. reticulatus (aestivalis) è più precoce (estivo) e comune a quote inferiori nella faggeta.
         if month < 9: score_reticulatus *= 1.5
         if elev_m <= 1100: score_reticulatus *= 1.5
+        
         scores["edulis"] = score_edulis
         scores["reticulatus"] = score_reticulatus
+
     elif h == "quercia":
+        # Nelle querce, l'unica specie ecologicamente corretta è B. aereus.
         scores["aereus"] = 1.0
+        
     elif h in ["conifere", "pino"]:
+        # Nelle conifere, la specie simbionte è B. pinophilus.
         scores["pinophilus"] = 1.0
+        
     elif h == "castagno":
+        # Nei castagneti sono comuni specie termofile come reticulatus e aereus.
         scores["reticulatus"] = 1.0
-        scores["aereus"] = 0.7
-    else:
+        scores["aereus"] = 0.7  # Spesso presente ma con B. reticulatus come dominante.
+        
+    else:  # 'misto' o altri habitat non specificati
+        # Per i boschi misti, usiamo una logica flessibile che considera più fattori.
+        # B. aereus (termofilo)
         if "quercia" in h or "castagno" in h or h == "misto":
             scores["aereus"] = 1.0 if 6 <= month <= 9 and elev_m < 1000 else 0.1
+        # B. reticulatus (estivo)
         if "faggio" in h or "quercia" in h or "castagno" in h or h == "misto":
             scores["reticulatus"] = 1.0 if 5 <= month <= 9 else 0.2
+        # B. edulis (autunnale, montano)
         if "faggio" in h or "conifere" in h or h == "misto":
             scores["edulis"] = 1.0 if 8 <= month <= 11 and elev_m > 800 else 0.2
+        # B. pinophilus (legato alle conifere)
         if "conifere" in h or "pino" in h or h == "misto":
             scores["pinophilus"] = 0.9 if elev_m > 700 else 0.1
 
+    # Normalizza i punteggi per ottenere le probabilità
     total = sum(scores.values())
     if total > 0:
         probabilities = {species: score / total for species, score in scores.items()}
     else:
+        # Fallback nel caso nessun punteggio sia > 0
         return {"reticulatus": 1.0}
     
+    # Filtra le specie con probabilità significativa per evitare rumore nel grafico
     significant_species = {k: v for k, v in probabilities.items() if v > 0.05}
     
+    # Se il filtro rimuove tutte le specie, ripristina la più probabile come fallback
     if not significant_species:
         if probabilities:
             most_probable = max(probabilities, key=probabilities.get)
             return {most_probable: 1.0}
         else:
-            return {"reticulatus": 1.0}
+            return {"reticulatus": 1.0} # Fallback definitivo
         
     return significant_species
 
@@ -667,7 +690,9 @@ def determine_coexistence_scenario(species_probabilities: Dict[str, float]) -> s
     """
     sorted_species = sorted(species_probabilities.items(), key=lambda x: x[1], reverse=True)
     
-    if not sorted_species or len(sorted_species) == 1:
+    if not sorted_species:
+        return "dominanza_netta"
+    if len(sorted_species) == 1:
         return "dominanza_netta"
     elif len(sorted_species) == 2 and sorted_species[1][1] > 0.25:
         return "codominanza"
@@ -686,9 +711,10 @@ def calculate_weighted_lag(species_probabilities: Dict[str, float],
     species_lags = {}
     
     for species, probability in species_probabilities.items():
-        if probability > 0.05:
+        if probability > 0.05:  # Solo specie significativa
             profile = SPECIES_PROFILES_V30[species]
             
+            # Calcolo lag specie-specifico
             base_lag = profile["lag_base"]
             smi_effect = -3.8 * (smi ** 1.3)
             shock_effect = -1.8 * thermal_shock
@@ -722,6 +748,8 @@ def confidence_5d_multi_species(
 ) -> Dict[str, float]:
     
     met_conf = clamp(weather_agreement, 0.15, 0.98)
+    
+    # Bonus ERA5-Land
     if era5_quality > 0:
         met_conf *= (1.0 + era5_quality * 0.1)
     
@@ -761,11 +789,92 @@ def confidence_5d_multi_species(
     }
 
 # ===== METEO IBRIDO AGGIORNATO =====
+async def fetch_visual_crossing_historical(lat: float, lon: float, days_back: int = 8) -> List[Dict[str, Any]]:
+    if not VISUAL_CROSSING_KEY:
+        logger.warning("Visual Crossing API key not configured")
+        return []
+    
+    try:
+        end_date = datetime.now()
+        start_date = end_date - timedelta(days=days_back-1)
+        
+        start_str = start_date.strftime("%Y-%m-%d")
+        end_str = end_date.strftime("%Y-%m-%d")
+        
+        url = f"https://weather.visualcrossing.com/VisualCrossingWebServices/rest/services/timeline/{lat},{lon}/{start_str}/{end_str}"
+        params = {
+            "key": VISUAL_CROSSING_KEY,
+            "include": "days",
+            "elements": "datetime,temp,tempmin,tempmax,precip,humidity",
+            "unitGroup": "metric"
+        }
+        
+        async with httpx.AsyncClient(timeout=30, headers=HEADERS) as c:
+            r = await c.get(url, params=params)
+            r.raise_for_status()
+            data = r.json()
+        
+        results = []
+        for day in data.get("days", []):
+            results.append({
+                "date": day["datetime"],
+                "precipitation_mm": float(day.get("precip", 0.0)),
+                "temp_min": float(day.get("tempmin", 0.0)),
+                "temp_max": float(day.get("tempmax", 0.0)),
+                "temp_mean": float(day.get("temp", 0.0)),
+                "humidity": float(day.get("humidity", 65.0)),
+                "source": "visual_crossing"
+            })
+        
+        logger.info(f"Visual Crossing fetched {len(results)} days")
+        return results
+        
+    except Exception as e:
+        logger.error(f"Visual Crossing API failed: {e}")
+        return []
+
+async def fetch_open_meteo_recent_and_forecast(lat: float, lon: float, past: int = 7, future: int = 10) -> Dict[str, Any]:
+    url = "https://api.open-meteo.com/v1/forecast"
+    daily_vars = [
+        "precipitation_sum", "precipitation_hours",
+        "temperature_2m_mean", "temperature_2m_min", "temperature_2m_max",
+        "et0_fao_evapotranspiration", "relative_humidity_2m_mean"
+    ]
+    
+    params = {
+        "latitude": lat, "longitude": lon, "timezone": "auto",
+        "daily": ",".join(daily_vars),
+        "past_days": past, "forecast_days": future,
+    }
+    
+    async with httpx.AsyncClient(timeout=40, headers=HEADERS) as c:
+        r = await c.get(url, params=params)
+        r.raise_for_status()
+        data = r.json()
+    
+    daily = data["daily"]
+    results = []
+    for i, date_str in enumerate(daily["time"]):
+        results.append({
+            "date": date_str,
+            "precipitation_mm": float(daily["precipitation_sum"][i] or 0.0),
+            "temp_min": float(daily["temperature_2m_min"][i] or 0.0),
+            "temp_max": float(daily["temperature_2m_max"][i] or 0.0), 
+            "temp_mean": float(daily.get("temperature_2m_mean", [0.0] * len(daily["time"]))[i] or 
+                             (daily["temperature_2m_min"][i] + daily["temperature_2m_max"][i]) / 2.0),
+            "humidity": float(daily.get("relative_humidity_2m_mean", [65.0] * len(daily["time"]))[i] or 65.0),
+            "et0": float(daily.get("et0_fao_evapotranspiration", [2.0] * len(daily["time"]))[i] or 2.0),
+            "source": "open_meteo"
+        })
+    
+    return {"data": results, "original": data}
+
 async def fetch_hybrid_weather_data(lat: float, lon: float, total_past_days: int = 20, 
                                    future_days: int = 10, enable_era5: bool = False) -> Dict[str, Any]:
     try:
         logger.info(f"Fetching weather: Open-Meteo + ERA5-Land({enable_era5})")
 
+        # Prefetch ERA5-Land se abilitato
         era5_task = None
         if enable_era5:
             era5_task = asyncio.create_task(_prefetch_era5l_sm_advanced(lat, lon, total_past_days, enable_era5))
@@ -776,13 +885,16 @@ async def fetch_hybrid_weather_data(lat: float, lon: float, total_past_days: int
         if not om_data_list or len(om_data_list) < total_past_days:
             raise RuntimeError(f"Open-Meteo insufficient data: {len(om_data_list)} rows")
 
-        era5_data, era5_quality = None, 0.0
+        # Attendi ERA5-Land se attivo
+        era5_data = None
+        era5_quality = 0.0
         if era5_task:
             try:
                 await era5_task
                 cache_key = f"{round(lat,3)},{round(lon,3)}"
                 if cache_key in SM_CACHE:
-                    era5_data, era5_quality = SM_CACHE[cache_key], 0.9
+                    era5_data = SM_CACHE[cache_key]
+                    era5_quality = 0.9  # Alta qualità per ERA5-Land
                     logger.info("ERA5-Land data integrated successfully")
             except Exception as e:
                 logger.warning(f"ERA5-Land integration failed: {e}")
@@ -796,29 +908,82 @@ async def fetch_hybrid_weather_data(lat: float, lon: float, total_past_days: int
         ET0_all = [float(d.get("et0", 2.0)) for d in om_data_list]
 
         daily_payload = {
-            "time": time_all, "precipitation_sum": P_all, "temperature_2m_min": Tmin_all,
-            "temperature_2m_max": Tmax_all, "temperature_2m_mean": Tmean_all,
-            "relative_humidity_2m_mean": RH_all, "et0_fao_evapotranspiration": ET0_all
+            "time": time_all,
+            "precipitation_sum": P_all,
+            "temperature_2m_min": Tmin_all,
+            "temperature_2m_max": Tmax_all,
+            "temperature_2m_mean": Tmean_all,
+            "relative_humidity_2m_mean": RH_all,
+            "et0_fao_evapotranspiration": ET0_all
         }
 
-        completeness = min(1.0, len(P_all) / (total_past_days + future_days))
+        total_past_received = min(total_past_days, len(P_all))
+        completeness = min(1.0, float(len(P_all)) / float(total_past_days + future_days))
+        
         base_quality = min(0.97, 0.9 + 0.07 * completeness)
-        enhanced_quality = base_quality + (era5_quality * 0.1)
+        enhanced_quality = base_quality + (era5_quality * 0.1)  # Bonus ERA5-Land
 
         return {
-            "daily": daily_payload, "era5_data": era5_data,
+            "daily": daily_payload,
+            "era5_data": era5_data,
             "metadata": {
                 "sources": {
-                    "open_meteo_past_days": min(total_past_days, len(P_all)),
+                    "visual_crossing_days": 0,
+                    "open_meteo_past_days": total_past_received,
                     "open_meteo_forecast_days": max(0, len(P_all) - total_past_days),
-                    "era5_land_enabled": enable_era5, "era5_quality": era5_quality
+                    "era5_land_enabled": enable_era5,
+                    "era5_quality": era5_quality,
+                    "total_past_days": total_past_received,
+                    "completeness": completeness,
+                    "backup_used": False
                 },
                 "quality_score": min(0.99, enhanced_quality)
             }
         }
+
     except Exception as e:
         logger.error(f"Hybrid weather system failed: {e}")
-        raise HTTPException(500, "Errore sistema meteorologico ibrido")
+        # Fallback a Visual Crossing
+        vc_data = await fetch_visual_crossing_historical(lat, lon, days_back=total_past_days)
+        if not vc_data:
+            raise HTTPException(500, "Errore sistema meteorologico: nessun dato disponibile")
+
+        vc_sorted = sorted(vc_data, key=lambda x: x.get("date"))
+        time_series = [d.get("date") for d in vc_sorted]
+        P_series = [float(d.get("precipitation_mm", 0.0)) for d in vc_sorted]
+        Tmin_series = [float(d.get("temp_min", 0.0)) for d in vc_sorted]
+        Tmax_series = [float(d.get("temp_max", 0.0)) for d in vc_sorted]
+        Tmean_series = [float(d.get("temp_mean", (d.get("temp_min",0.0)+d.get("temp_max",0.0))/2.0)) for d in vc_sorted]
+        RH_series = [float(d.get("humidity", 65.0)) for d in vc_sorted]
+        ET0_series = [2.0] * len(P_series)  # Stima per ET0
+
+        daily_payload = {
+            "time": time_series,
+            "precipitation_sum": P_series,
+            "temperature_2m_min": Tmin_series,
+            "temperature_2m_max": Tmax_series,
+            "temperature_2m_mean": Tmean_series,
+            "relative_humidity_2m_mean": RH_series,
+            "et0_fao_evapotranspiration": ET0_series
+        }
+
+        completeness = min(1.0, float(len(P_series)) / float(total_past_days))
+        return {
+            "daily": daily_payload,
+            "era5_data": None,
+            "metadata": {
+                "sources": {
+                    "visual_crossing_days": len(P_series),
+                    "open_meteo_past_days": 0,
+                    "era5_land_enabled": False,
+                    "era5_quality": 0.0,
+                    "completeness": completeness,
+                    "backup_used": True,
+                    "backup_provider": "visual_crossing"
+                },
+                "quality_score": min(0.9, 0.7 + 0.2 * completeness)
+            }
+        }
 
 # ===== ELEVAZIONE AVANZATA =====
 _elev_cache: Dict[str, Any] = {}
@@ -862,28 +1027,44 @@ async def fetch_elevation_grid_super_advanced(lat: float, lon: float) -> Tuple[f
 async def _fetch_elevation_block_super_advanced(lat: float, lon: float, step_m: float) -> Optional[List[List[float]]]:
     cache_key = f"{round(lat,5)},{round(lon,5)}@{int(step_m)}"
     
-    if cache_key in _elev_cache and (time.time() - _elev_cache[cache_key].get("timestamp", 0) < 3600):
-        return _elev_cache[cache_key]["grid"]
+    if cache_key in _elev_cache:
+        cache_age = time.time() - _elev_cache[cache_key].get("timestamp", 0)
+        if cache_age < 3600:
+            return _elev_cache[cache_key]["grid"]
     
     try:
         deg_lat = step_m / 111320.0
         deg_lon = step_m / (111320.0 * max(0.2, math.cos(math.radians(lat))))
         
-        coords = [{"latitude": lat + dy, "longitude": lon + dx} for dy in [-deg_lat, 0, deg_lat] for dx in [-deg_lon, 0, deg_lon]]
+        coords = []
+        for dy in [-deg_lat, 0, deg_lat]:
+            for dx in [-deg_lon, 0, deg_lon]:
+                coords.append({
+                    "latitude": lat + dy,
+                    "longitude": lon + dx
+                })
         
         async with httpx.AsyncClient(timeout=25, headers=HEADERS) as c:
-            r = await c.post("https://api.open-elevation.com/api/v1/lookup", json={"locations": coords})
+            r = await c.post(
+                "https://api.open-elevation.com/api/v1/lookup",
+                json={"locations": coords}
+            )
             r.raise_for_status()
             j = r.json()
         
         elevations = [p["elevation"] for p in j["results"]]
         grid = [elevations[0:3], elevations[3:6], elevations[6:9]]
         
-        _elev_cache[cache_key] = {"grid": grid, "timestamp": time.time()}
+        _elev_cache[cache_key] = {
+            "grid": grid,
+            "timestamp": time.time()
+        }
         
         if len(_elev_cache) > 1000:
-            oldest_keys = sorted(_elev_cache.keys(), key=lambda k: _elev_cache[k]["timestamp"])[:200]
-            for k in oldest_keys: _elev_cache.pop(k, None)
+            oldest_keys = sorted(_elev_cache.keys(), 
+                               key=lambda k: _elev_cache[k]["timestamp"])[:200]
+            for k in oldest_keys:
+                _elev_cache.pop(k, None)
         
         return grid
         
@@ -893,286 +1074,712 @@ async def _fetch_elevation_block_super_advanced(lat: float, lon: float, step_m: 
 
 def slope_aspect_from_grid_super_advanced(grid: List[List[float]], cell_size_m: float = 30.0) -> Tuple[float, float, Optional[str]]:
     z = grid
+    
     dzdx = ((z[0][2] + 2*z[1][2] + z[2][2]) - (z[0][0] + 2*z[1][0] + z[2][0])) / (8 * cell_size_m)
     dzdy = ((z[2][0] + 2*z[2][1] + z[2][2]) - (z[0][0] + 2*z[0][1] + z[0][2])) / (8 * cell_size_m)
+    
     slope_rad = math.atan(math.hypot(dzdx, dzdy))
     slope_deg = math.degrees(slope_rad)
     
     if dzdx == 0 and dzdy == 0:
-        return round(slope_deg, 2), 0.0, None
+        aspect_deg = 0.0
+        octant = None
     else:
         aspect_rad = math.atan2(-dzdx, dzdy)
         aspect_deg = (math.degrees(aspect_rad) + 360.0) % 360.0
+        
         octants = ["N", "NE", "E", "SE", "S", "SW", "W", "NW", "N"]
         idx = int((aspect_deg + 22.5) // 45)
         octant = octants[idx] if slope_deg > 2.0 else None
-        return round(slope_deg, 2), round(aspect_deg, 1), octant
+    
+    return round(slope_deg, 2), round(aspect_deg, 1), octant
 
 def concavity_from_grid_super_advanced(grid: List[List[float]]) -> float:
-    z, center = grid, grid[1][1]
-    curvatures = [z[0][1] + z[2][1] - 2*center, z[1][0] + z[1][2] - 2*center,
-                  z[0][0] + z[2][2] - 2*center, z[0][2] + z[2][0] - 2*center]
-    mean_curvature = sum(curvatures) / len(curvatures)
+    z = grid
+    center = z[1][1]
+    
+    curvatures = []
+    
+    if len(z) >= 3:
+        ns_curv = z[0][1] + z[2][1] - 2*center
+        curvatures.append(ns_curv)
+    
+    if len(z[0]) >= 3:
+        ew_curv = z[1][0] + z[1][2] - 2*center
+        curvatures.append(ew_curv)
+    
+    nw_se_curv = z[0][0] + z[2][2] - 2*center
+    ne_sw_curv = z[0][2] + z[2][0] - 2*center
+    curvatures.extend([nw_se_curv, ne_sw_curv])
+    
+    mean_curvature = sum(curvatures) / len(curvatures) if curvatures else 0.0
     return clamp(mean_curvature / 10.0, -0.5, 0.5)
 
 def drainage_proxy_from_grid_advanced(grid: List[List[float]]) -> float:
-    z, center = grid, grid[1][1]
-    draining_cells = sum(1 for i in range(3) for j in range(3) if not (i == 1 and j == 1) and z[i][j] > center)
-    return clamp(draining_cells / 8.0, 0.1, 1.0)
+    z = grid
+    center = z[1][1]
+    
+    draining_cells = 0
+    total_cells = 0
+    
+    for i in range(3):
+        for j in range(3):
+            if i == 1 and j == 1: continue
+            if z[i][j] > center: draining_cells += 1
+            total_cells += 1
+    
+    drainage_ratio = draining_cells / total_cells if total_cells > 0 else 0.0
+    return clamp(drainage_ratio, 0.1, 1.0)
 
 # ===== OSM HABITAT =====
+OVERPASS_URLS = [
+    "https://overpass-api.de/api/interpreter",
+    "https://overpass.kumi.systems/api/interpreter", 
+    "https://overpass.openstreetmap.ru/api/interpreter"
+]
+
 async def fetch_osm_habitat_super_advanced(lat: float, lon: float, radius_m: int = 500) -> Tuple[str, float, Dict[str, float]]:
-    query = f"""[out:json][timeout:30];(way(around:{radius_m},{lat},{lon})["landuse"="forest"];way(around:{radius_m},{lat},{lon})["natural"~"^(wood|forest)$"];relation(around:{radius_m},{lat},{lon})["landuse"="forest"];relation(around:{radius_m},{lat},{lon})["natural"~"^(wood|forest)$"];node(around:{radius_m},{lat},{lon})["natural"="tree"];);out tags qt;"""
-    urls = ["https://overpass-api.de/api/interpreter", "https://overpass.kumi.systems/api/interpreter"]
-    for url in urls:
+    
+    query = f"""
+    [out:json][timeout:30];
+    (
+      way(around:{radius_m},{lat},{lon})["landuse"="forest"];
+      way(around:{radius_m},{lat},{lon})["natural"~"^(wood|forest)$"];
+      relation(around:{radius_m},{lat},{lon})["landuse"="forest"];
+      relation(around:{radius_m},{lat},{lon})["natural"~"^(wood|forest)$"];
+      node(around:{radius_m},{lat},{lon})["natural"="tree"];
+      node(around:{radius_m},{lat},{lon})["tree"];
+    );
+    out tags qt;
+    """
+    
+    for url_idx, url in enumerate(OVERPASS_URLS):
         try:
             async with httpx.AsyncClient(timeout=35, headers=HEADERS) as c:
                 r = await c.post(url, data={"data": query})
                 r.raise_for_status()
                 j = r.json()
+            
             scores = score_osm_elements_super_advanced(j.get("elements", []))
             habitat, confidence = choose_dominant_habitat_advanced(scores)
-            logger.info(f"OSM habitat via {url}: {habitat} (conf: {confidence:.2f})")
+            
+            logger.info(f"OSM habitat via URL {url_idx}: {habitat} (conf: {confidence:.2f})")
             return habitat, confidence, scores
+            
         except Exception as e:
-            logger.warning(f"OSM URL {url} failed: {e}")
+            logger.warning(f"OSM URL {url_idx} failed: {e}")
             continue
+    
     logger.info("OSM failed, using heuristic")
-    return "misto", 0.2, {}
+    return habitat_heuristic_super_advanced(lat, lon)
 
 def score_osm_elements_super_advanced(elements: List[Dict]) -> Dict[str, float]:
     scores = {"castagno": 0.0, "faggio": 0.0, "quercia": 0.0, "conifere": 0.0, "misto": 0.0}
+    
     for element in elements:
         tags = {k.lower(): str(v).lower() for k, v in (element.get("tags", {})).items()}
-        genus, species = tags.get("genus", ""), tags.get("species", "")
-        if "castanea" in genus or "castagna" in species: scores["castagno"] += 4.0
-        elif "quercus" in genus or "querce" in species: scores["quercia"] += 4.0
-        elif "fagus" in genus or "faggio" in species: scores["faggio"] += 4.0
-        elif any(g in genus for g in ["pinus", "picea", "abies", "larix"]): scores["conifere"] += 3.5
-        if "needleleaved" in tags.get("leaf_type", ""): scores["conifere"] += 2.0
-        elif "broadleaved" in tags.get("leaf_type", ""): scores["misto"] += 1.0
+        
+        genus = tags.get("genus", "")
+        species = tags.get("species", "")
+        
+        if "castanea" in genus or "castagna" in species:
+            scores["castagno"] += 4.0
+        elif "quercus" in genus or "querce" in species:
+            scores["quercia"] += 4.0
+        elif "fagus" in genus or "faggio" in species:
+            scores["faggio"] += 4.0
+        elif any(g in genus for g in ["pinus", "picea", "abies", "larix"]):
+            scores["conifere"] += 3.5
+        
+        leaf_type = tags.get("leaf_type", "")
+        if "needleleaved" in leaf_type:
+            scores["conifere"] += 2.0
+        elif "broadleaved" in leaf_type:
+            scores["misto"] += 1.0
+        
+        wood = tags.get("wood", "")
+        wood_scores = {
+            "conifer": ("conifere", 2.5), "pine": ("conifere", 2.0),
+            "spruce": ("conifere", 2.0), "fir": ("conifere", 2.0),
+            "beech": ("faggio", 3.0), "oak": ("quercia", 3.0),
+            "chestnut": ("castagno", 3.0), "broadleaved": ("misto", 1.5),
+            "deciduous": ("misto", 1.0), "mixed": ("misto", 2.0)
+        }
+        
+        for keyword, (habitat, score) in wood_scores.items():
+            if keyword in wood:
+                scores[habitat] += score
+        
+        landuse = tags.get("landuse", "")
+        natural = tags.get("natural", "")
+        
+        if landuse == "forest" or natural in ["wood", "forest"]:
+            for habitat in scores:
+                scores[habitat] += 0.2
+    
     return scores
 
 def choose_dominant_habitat_advanced(scores: Dict[str, float]) -> Tuple[str, float]:
     total_score = sum(scores.values())
-    if total_score < 0.5: return "misto", 0.15
-    habitat, max_score = max(scores.items(), key=lambda x: x[1])
+    
+    if total_score < 0.5:
+        return "misto", 0.15
+    
+    dominant = max(scores.items(), key=lambda x: x[1])
+    habitat, max_score = dominant
+    
     dominance_ratio = max_score / total_score
-    confidence = clamp(dominance_ratio ** 0.7 * 0.9, 0.1, 0.95)
-    return habitat, confidence
+    confidence = min(0.95, dominance_ratio ** 0.7 * 0.9)
+    
+    if habitat in ["faggio", "castagno"] and max_score > 3.0:
+        confidence *= 1.1
+    
+    return habitat, clamp(confidence, 0.1, 0.95)
+
+def habitat_heuristic_super_advanced(lat: float, lon: float) -> Tuple[str, float, Dict[str, float]]:
+    elevation_estimate = 800.0
+    
+    if lat > 46.5:
+        habitat, conf = "conifere", 0.65
+    elif lat > 45.0:
+        habitat, conf = ("faggio" if elevation_estimate > 1000 else "misto"), 0.6
+    elif lat > 43.5:
+        if lon < 11.0:
+            habitat, conf = "castagno", 0.55
+        else:
+            habitat, conf = "misto", 0.5
+    elif lat > 41.5:
+        if elevation_estimate > 1200:
+            habitat, conf = "faggio", 0.6
+        else:
+            habitat, conf = "quercia", 0.55
+    else:
+        habitat, conf = "quercia", 0.6
+    
+    scores = {h: (0.8 if h == habitat else 0.1) for h in ["castagno", "faggio", "quercia", "conifere", "misto"]}
+    
+    return habitat, conf, scores
 
 # ===== EVENT DETECTION MULTI-SPECIE =====
 def detect_rain_events_multi_species(rains: List[float], smi_series: List[float], month: int, elevation: float, lat: float, cumulative_moisture_series: List[float], months_series: Optional[List[int]] = None) -> List[Tuple[int, float, float]]:
-    events, n, i = [], len(rains), 0
+    events = []
+    n = len(rains)
+    i = 0
+    
     while i < n:
-        smi = smi_series[i] if i < len(smi_series) else 0.5
-        c_moist = cumulative_moisture_series[i] if i < len(cumulative_moisture_series) else 0.0
-        month_local = months_series[i] if months_series and i < len(months_series) else month
-        thr1d = dynamic_rain_threshold_v30(8.5, smi, month_local, elevation, lat, 0.0, c_moist)
-        if rains[i] >= thr1d:
-            events.append((i, rains[i], event_strength_advanced(rains[i], antecedent_smi=smi))); i += 1; continue
-        if i + 1 < n and rains[i] + rains[i+1] >= thr1d * 1.4:
-            avg_smi = (smi + (smi_series[i+1] if i+1 < len(smi_series) else 0.5)) / 2
-            events.append((i+1, rains[i] + rains[i+1], event_strength_advanced(rains[i] + rains[i+1], 36.0, avg_smi))); i += 2; continue
-        if i + 2 < n and sum(rains[i:i+3]) >= thr1d * 1.8:
-            avg_smi = sum(smi_series[i:i+3])/3 if i+2 < len(smi_series) else 0.5
-            events.append((i+2, sum(rains[i:i+3]), event_strength_advanced(sum(rains[i:i+3]), 60.0, avg_smi))); i += 3; continue
+        smi_local = smi_series[i] if i < len(smi_series) else 0.5
+        cum_moisture = cumulative_moisture_series[i] if i < len(cumulative_moisture_series) else 0.0
+        temp_trend = 0.0
+        
+        base_thr = 8.5
+        local_month = (months_series[i] if months_series and i < len(months_series) else month)
+        threshold_1d = dynamic_rain_threshold_v30(base_thr, smi_local, local_month, elevation, lat, temp_trend, cum_moisture)
+        threshold_2d = threshold_1d * 1.4
+        threshold_3d = threshold_1d * 1.8
+        
+        if rains[i] >= threshold_1d:
+            strength = event_strength_advanced(rains[i], antecedent_smi=smi_local)
+            events.append((i, rains[i], strength))
+            i += 1
+            continue
+        
+        if i + 1 < n:
+            rain_2d = rains[i] + rains[i + 1]
+            if rain_2d >= threshold_2d:
+                avg_smi = (smi_local + (smi_series[i+1] if i+1 < len(smi_series) else 0.5)) / 2
+                strength = event_strength_advanced(rain_2d, duration_hours=36.0, antecedent_smi=avg_smi)
+                events.append((i + 1, rain_2d, strength))
+                i += 2
+                continue
+        
+        if i + 2 < n:
+            rain_3d = rains[i] + rains[i + 1] + rains[i + 2]
+            if rain_3d >= threshold_3d:
+                avg_smi = sum(smi_series[i:i+3]) / 3 if i+2 < len(smi_series) else 0.5
+                strength = event_strength_advanced(rain_3d, duration_hours=60.0, antecedent_smi=avg_smi)
+                events.append((i + 2, rain_3d, strength))
+                i += 3
+                continue
+        
         i += 1
+    
     return events
 
-def event_strength_advanced(mm: float, duration_hours: float = 24.0, antecedent_smi: float = 0.5) -> float:
-    base = 1.0 - math.exp(-mm / 15.0)
-    dur_factor = min(1.2, 1.0 + (duration_hours - 12.0) / 48.0)
+def event_strength_advanced(mm: float, duration_hours: float = 24.0, 
+                          antecedent_smi: float = 0.5) -> float:
+    base_strength = 1.0 - math.exp(-mm / 15.0)
+    duration_factor = min(1.2, 1.0 + (duration_hours - 12.0) / 48.0)
     smi_factor = 0.7 + 0.6 * antecedent_smi
-    return clamp(base * dur_factor * smi_factor, 0.0, 1.5)
+    return clamp(base_strength * duration_factor * smi_factor, 0.0, 1.5)
 
 def gaussian_kernel_advanced(x: float, mu: float, sigma: float, skewness: float = 0.0) -> float:
     base_gauss = math.exp(-0.5 * ((x - mu) / sigma) ** 2)
+    
     if skewness != 0.0:
         skew_factor = 1.0 + skewness * ((x - mu) / sigma)
         return base_gauss * max(0.1, skew_factor)
+    
     return base_gauss
 
 # ===== DATABASE UTILS MULTI-SPECIE =====
-def save_prediction_multi_species(lat: float, lon: float, date: str, primary_species: str, secondary_species: str,
-                                 coexistence_prob: float, primary_score: int, confidence_data: dict, weather_data: dict):
+def save_prediction_multi_species(lat: float, lon: float, date: str, 
+                                 primary_species: str, secondary_species: str,
+                                 coexistence_prob: float, primary_score: int,
+                                 confidence_data: dict, weather_data: dict):
     try:
         conn = sqlite3.connect(DB_PATH)
         cursor = conn.cursor()
+        
         geohash = geohash_encode_advanced(lat, lon, precision=8)
-        cursor.execute('''INSERT INTO predictions (lat, lon, date, predicted_score, species, secondary_species, coexistence_probability, confidence_data, weather_data, model_version, geohash) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',
-                       (lat, lon, date, primary_score, primary_species, secondary_species, coexistence_prob, json.dumps(confidence_data), json.dumps(weather_data), "3.4.0", geohash))
+        
+        cursor.execute('''
+            INSERT INTO predictions 
+            (lat, lon, date, predicted_score, species, secondary_species, 
+             coexistence_probability, confidence_data, weather_data, model_version, geohash)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ''', (lat, lon, date, primary_score, primary_species, secondary_species,
+              coexistence_prob, json.dumps(confidence_data), json.dumps(weather_data),
+              "3.2.1", geohash))
+        
         conn.commit()
         conn.close()
+        logger.info(f"Multi-species prediction saved: {primary_species} + {secondary_species}")
+        
     except Exception as e:
         logger.error(f"Error saving prediction: {e}")
 
-def check_recent_validations_super_advanced(lat: float, lon: float, days: int = 30, radius_km: float = 15.0) -> Tuple[bool, int, float]:
+def check_recent_validations_super_advanced(lat: float, lon: float, days: int = 30, 
+                                           radius_km: float = 15.0) -> Tuple[bool, int, float]:
     try:
         conn = sqlite3.connect(DB_PATH)
         cursor = conn.cursor()
-        lat_d, lon_d = radius_km / 111.0, radius_km / (111.0 * math.cos(math.radians(lat)))
-        cutoff = (datetime.now() - timedelta(days=days)).date().isoformat()
-        cursor.execute('SELECT COUNT(*), AVG(confidence) FROM sightings WHERE lat BETWEEN ? AND ? AND lon BETWEEN ? AND ? AND date >= ?', (lat-lat_d, lat+lat_d, lon-lon_d, lon+lon_d, cutoff))
-        pos_count, pos_conf = cursor.fetchone()
-        pos_count = pos_count or 0
-        cursor.execute('SELECT COUNT(*) FROM no_sightings WHERE lat BETWEEN ? AND ? AND lon BETWEEN ? AND ? AND date >= ?', (lat-lat_d, lat+lat_d, lon-lon_d, lon+lon_d, cutoff))
-        neg_count = (cursor.fetchone() or [0])[0]
+        
+        lat_delta = radius_km / 111.0
+        lon_delta = radius_km / (111.0 * math.cos(math.radians(lat)))
+        cutoff_date = (datetime.now() - timedelta(days=days)).date().isoformat()
+        
+        cursor.execute('''
+            SELECT COUNT(*), AVG(confidence) FROM sightings 
+            WHERE lat BETWEEN ? AND ? AND lon BETWEEN ? AND ?
+            AND date >= ?
+        ''', (lat - lat_delta, lat + lat_delta, 
+              lon - lon_delta, lon + lon_delta, cutoff_date))
+        
+        pos_result = cursor.fetchone()
+        pos_count = pos_result[0] or 0
+        pos_conf = pos_result[1] or 0.0
+        
+        cursor.execute('''
+            SELECT COUNT(*), AVG(search_thoroughness) FROM no_sightings 
+            WHERE lat BETWEEN ? AND ? AND lon BETWEEN ? AND ?
+            AND date >= ?
+        ''', (lat - lat_delta, lat + lat_delta, 
+              lon - lon_delta, lon + lon_delta, cutoff_date))
+        
+        neg_result = cursor.fetchone()
+        neg_count = neg_result[0] or 0
+        
+        total_count = pos_count + neg_count
+        avg_accuracy = (pos_conf + (neg_result[1] or 0.0)) / 2.0 if total_count > 0 else 0.0
+        
         conn.close()
-        return (pos_count + neg_count) >= 3, pos_count + neg_count, pos_conf or 0.0
+        
+        has_validations = total_count >= 3
+        return has_validations, total_count, avg_accuracy
+        
     except Exception as e:
         logger.error(f"Error checking validations: {e}")
         return False, 0, 0.0
 
-# ===== NUOVA SEZIONE TESTUALE "INTELLIGENTE" v3.4.0 =====
-class FruitingWindow(NamedTuple):
-    start_index: int
-    end_index: int
-    peak_index: int
-    peak_value: float
+# ===== ANALISI TESTUALE MULTI-SPECIE =====
+def build_analysis_multi_species_v30(payload: Dict[str, Any]) -> str:
+    """Genera analisi scientifica dettagliata per sistema multi-specie"""
     
-def _it_date(d: date, style: str = 'short') -> str:
-    mesi = ['gen', 'feb', 'mar', 'apr', 'mag', 'giu', 'lug', 'ago', 'set', 'ott', 'nov', 'dic']
-    return f"{d.day} {mesi[d.month-1]}"
-
-def get_intelligent_closing_date(
-    window: FruitingWindow, forecast: List[float], weather_data: Dict[str, Any], species: str,
-    today: date, past_days: int
-) -> int:
-    """
-    Stima la data di chiusura usando un modello ibrido: matematico, budget idrico e hazard.
-    Ritorna l'indice del giorno di chiusura relativo all'inizio del forecast (giorno 0 = oggi).
-    """
-    n_forecast = len(forecast)
+    species_data = payload.get("species_analysis", {})
+    primary_species = species_data.get("primary_species", "reticulatus")
+    secondary_species = species_data.get("secondary_species", "")
+    coexistence_scenario = species_data.get("coexistence_scenario", "dominanza_netta")
     
-    # 1. Metodo Matematico (EWF)
-    t_close_math = n_forecast + 2  # Fallback
-    if window.end_index >= n_forecast - 1:
-        k = min(4, n_forecast - window.peak_index if n_forecast > window.peak_index else 2)
-        if k >= 2:
-            tail_values = forecast[-k:]
-            deltas = [tail_values[i] - tail_values[i-1] for i in range(1, len(tail_values))]
-            avg_slope = sum(deltas) / len(deltas) if deltas else 0.0
-            last_value = tail_values[-1]
-            if avg_slope < -0.5:
-                extra_days = math.ceil(max(1.0, (last_value - 15.0) / abs(avg_slope)))
-                t_close_math = (n_forecast - 1) + extra_days
-            else:
-                t_close_math = (n_forecast - 1) + (4 if last_value > 50 else 3)
-
-    # 2. Metodo Budget Idrico
-    t_close_hydro = n_forecast + 5  # Fallback
-    try:
-        w_crit = {"edulis": 0.25, "reticulatus": 0.2, "aereus": 0.18, "pinophilus": 0.22}.get(species, 0.2)
-        k_days_limit = SPECIES_PROFILES_V30.get(species, {}).get('drought_days_limit', 3)
-        
-        p_series = weather_data['daily']['precipitation_sum']
-        et0_series = weather_data['daily']['et0_fao_evapotranspiration']
-        
-        # Inizializza il budget idrico odierno (semplificato)
-        wt = 0.5 
-        drought_days = 0
-        
-        # Simula per i prossimi 20 giorni a partire da oggi
-        for i in range(n_forecast + 10):
-            day_index_total = past_days + i
-            p = p_series[day_index_total] if day_index_total < len(p_series) else 0.2
-            et0 = et0_series[day_index_total] if day_index_total < len(et0_series) else 2.8
-            
-            # Semplice formula di bilancio idrico
-            wt = clamp(wt + p / 20.0 - et0 / 50.0, 0, 1)
-
-            if wt < w_crit:
-                drought_days += 1
-            else:
-                drought_days = 0
-            
-            if drought_days >= k_days_limit:
-                t_close_hydro = i
-                break
-    except Exception as e:
-        logger.warning(f"Calcolo budget idrico fallito: {e}")
-
-    # 3. Fusione
-    final_closing_index = int(round(0.4 * t_close_math + 0.6 * t_close_hydro))
-    return min(n_forecast + 15, final_closing_index) # Limita a 15 giorni extra per sicurezza
-
-def build_analysis_multi_species_v340(payload: Dict[str, Any]) -> str:
+    weather_sources = payload.get("weather_sources", {})
+    weather_quality = payload.get("weather_quality_score", 0.5)
+    era5_enabled = weather_sources.get("era5_land_enabled", False)
+    era5_quality = weather_sources.get("era5_quality", 0.0)
+    
+    habitat_used = payload.get("habitat_used", "misto")
+    elevation = payload.get("elevation_m", 800)
+    aspect = payload.get("aspect_octant", "N/A")
+    
     lines = []
-    try:
-        today = datetime.utcnow().date()
-        species_info = payload['species_analysis']
-        forecast = species_info['species_forecasts'].get(species_info['primary_species'], [])
+    
+    # Header
+    lines.append("<h4>🧬 Analisi Biologica Multi-Specie v3.2.1</h4>")
+    lines.append("<p><em>Sistema a curve multiple con durata della buttata variabile in base a specie, temperatura e VPD.</em></p>")
+    
+    # Sistema meteorologico avanzato
+    lines.append("<h4>🌦️ Sistema Meteorologico Ibrido Avanzato</h4>")
+    om_days = weather_sources.get("open_meteo_past_days", 0)
+    era5_text = f" + ERA5-Land ({era5_quality:.2f})" if era5_enabled and era5_quality > 0 else ""
+    quality_color = "#66e28a" if weather_quality >= 0.8 else "#ffc857" if weather_quality >= 0.6 else "#ff6b6b"
+    
+    lines.append(f"<p><strong>Fonti integrate</strong>: Open-Meteo ({om_days} giorni){era5_text}</p>")
+    lines.append(f"<p><strong>Qualità dati</strong>: <span style='color:{quality_color};font-weight:bold'>{weather_quality:.2f}</span>/1.00")
+    if era5_enabled:
+        lines.append(" (Enhanced con dati di umidità suolo ERA5-Land)")
+    lines.append("</p>")
+    
+    # Coesistenza specie
+    lines.append("<h4>🍄 Analisi Coesistenza Specie (Borgotaro Model)</h4>")
+    
+    if coexistence_scenario == "dominanza_netta":
+        primary_profile = SPECIES_PROFILES_V30.get(primary_species, {})
+        description = primary_profile.get("description", "Specie non identificata")
+        lines.append(f"<p><strong>Specie dominante</strong>: <em>Boletus {primary_species}</em> ({description})</p>")
+        lines.append(f"<p><strong>Scenario</strong>: Dominanza netta - Condizioni ottimali per una singola specie in questo habitat ({habitat_used}) e elevazione ({elevation}m)</p>")
         
-        lines.append("<h4>🧬 Analisi Biologica Multi-Specie v3.4.0</h4>")
-        lines.append("<p><em>Modello con data di chiusura intelligente (budget idrico) e rilevamento di finestre multiple.</em></p>")
+    elif coexistence_scenario == "codominanza":
+        primary_profile = SPECIES_PROFILES_V30.get(primary_species, {})
+        secondary_profile = SPECIES_PROFILES_V30.get(secondary_species, {})
+        lines.append(f"<p><strong>Codominanza rilevata</strong>: <em>B. {primary_species}</em> + <em>B. {secondary_species}</em></p>")
+        lines.append(f"<p><strong>Specie primaria</strong>: {primary_profile.get('description', 'N/A')}</p>")
+        lines.append(f"<p><strong>Specie secondaria</strong>: {secondary_profile.get('description', 'N/A')}</p>")
+        lines.append(f"<p><strong>Scenario</strong>: Zona di transizione ecologica - Due specie coesistono con probabilità significative. Questo riflette la realtà documentata in aree come Borgotaro (Parma) dove multiple specie di porcini crescono negli stessi boschi.</p>")
+        
+    elif coexistence_scenario == "comunita_mista":
+        lines.append(f"<p><strong>Comunità mista complessa</strong>: Ambiente che supporta multiple specie di porcini</p>")
+        lines.append(f"<p><strong>Specie principale</strong>: <em>B. {primary_species}</em></p>")
+        lines.append(f"<p><strong>Scenario</strong>: Ecosistema ricco e diversificato - Condizioni favorevoli per una comunità fungina complessa. Tipico di boschi maturi con habitat diversificati.</p>")
+    
+    # Strategia di ricerca dettagliata
+    lines.append("<h4>🎯 Strategia di Ricerca Scientificamente Informata</h4>")
+    lines.append("<div class='return-advice'>")
+    
+    if coexistence_scenario in ["codominanza", "comunita_mista"]:
+        lines.append("<p><strong>Approccio multi-target</strong>: Cerca in microhabitat differenti per massimizzare le probabilità di successo:</p>")
+        lines.append("<ul style='margin:8px 0 0 20px'>")
+        
+        primary_profile = SPECIES_PROFILES_V30.get(primary_species, {})
+        if primary_species == "edulis":
+            lines.append("<li><strong>Per B. edulis</strong>: Zone più fresche e umide, versanti nord, sotto faggi maturi, terreno ricco di humus</li>")
+        elif primary_species == "reticulatus":
+            lines.append("<li><strong>Per B. reticulatus</strong>: Zone più soleggiate, margini del bosco, sotto querce e castagni, terreno ben drenato</li>")
+        elif primary_species == "aereus":
+            lines.append("<li><strong>Per B. aereus</strong>: Zone calde e asciutte, querceti esposti a sud, terreni calcarei</li>")
+        elif primary_species == "pinophilus":
+            lines.append("<li><strong>Per B. pinophilus</strong>: Pinete pure, terreni sabbiosi acidi, zone montane</li>")
+            
+        if secondary_species:
+            secondary_profile = SPECIES_PROFILES_V30.get(secondary_species, {})
+            if secondary_species == "edulis":
+                lines.append("<li><strong>Per B. edulis (secondario)</strong>: Versanti settentrionali più freschi, faggete dense</li>")
+            elif secondary_species == "reticulatus":
+                lines.append("<li><strong>Per B. reticulatus (secondario)</strong>: Radure assolate, bordi del sentiero</li>")
+            elif secondary_species == "aereus":
+                lines.append("<li><strong>Per B. aereus (secondario)</strong>: Querceti termofili, pendii esposti</li>")
+        
+        lines.append("</ul>")
+        lines.append("<p><strong>Timing ottimale</strong>: Pianifica uscite multiple per intercettare i diversi lag biologici delle specie (differenze 2-4 giorni)</p>")
+        
+    else:
+        # Dominanza netta
+        primary_profile = SPECIES_PROFILES_V30.get(primary_species, {})
+        lines.append(f"<p><strong>Focus mirato su B. {primary_species}</strong>:</p>")
+        lines.append("<ul style='margin:8px 0 0 20px'>")
+        
+        if primary_species == "edulis":
+            lines.append("<li><strong>Habitat preferito</strong>: Faggete mature (>50 anni), versanti nord-nordest, terreno umido ricco di humus</li>")
+            lines.append("<li><strong>Microhabitat</strong>: Sotto faggi isolati, radure piccole protette, zone con tappeto di foglie spesso</li>")
+            lines.append("<li><strong>Altitudine ottimale</strong>: 800-1500m, evita quote troppo basse in estate</li>")
+        elif primary_species == "reticulatus":
+            lines.append("<li><strong>Habitat preferito</strong>: Querceti e castagneti, zone più soleggiate, margini dei boschi</li>")
+            lines.append("<li><strong>Microhabitat</strong>: Ai piedi di querce mature, terreno asciutto e ben drenato, zone con luce filtrata</li>")
+            lines.append("<li><strong>Stagionalità</strong>: Fruttificazione estiva (maggio-agosto), cerca dopo temporali caldi</li>")
+        elif primary_species == "aereus":
+            lines.append("<li><strong>Habitat preferito</strong>: Querceti mediterranei, terreni calcarei, esposizioni sud</li>")
+            lines.append("<li><strong>Microhabitat</strong>: Sotto querce da sughero, lecci, terreno compatto e asciutto</li>")
+            lines.append("<li><strong>Condizioni ideali</strong>: Dopo piogge estive intense, temperature 20-28°C</li>")
+        elif primary_species == "pinophilus":
+            lines.append("<li><strong>Habitat preferito</strong>: Pinete pure, terreni sabbiosi acidi, altitudini medie</li>")
+            lines.append("<li><strong>Microhabitat</strong>: Sotto pini silvestri maturi, terreno coperto di aghi, zone aperte</li>")
+            lines.append("<li><strong>Rarità</strong>: Specie meno comune, richiede ricerca sistematica in habitat specifici</li>")
+        
+        lines.append("</ul>")
+    
+    lines.append("</div>")
+    
+    # Condizioni ambientali specifiche
+    lines.append("<h4>🌡️ Condizioni Ambientali e Timing</h4>")
+    best_window = payload.get("best_window", {})
+    if best_window and best_window.get("mean", 0) > 30:
+        start_day = best_window.get("start", 0) + 1
+        end_day = best_window.get("end", 0) + 1
+        lines.append(f"<p><strong>Finestra ottimale</strong>: Giorni {start_day}-{end_day} (indice medio {best_window.get('mean', 0)})</p>")
+        
+        lines.append("<ul style='margin:8px 0 0 20px'>")
+        lines.append(f"<li><strong>Condizioni attuali</strong>: Elevazione {elevation}m, esposizione {aspect}, habitat {habitat_used}</li>")
+        lines.append("<li><strong>Temperatura ideale</strong>: 15-22°C per la fruttificazione ottimale</li>")
+        lines.append("<li><strong>Umidità</strong>: Terreno umido ma non saturo, 24-48h dopo precipitazioni</li>")
+        lines.append("<li><strong>Pressure atmosferica</strong>: Preferibilmente in aumento dopo sistemi perturbati</li>")
+        lines.append("</ul>")
+    else:
+        lines.append("<p><strong>Condizioni attuali non ottimali</strong>: Attendi precipitazioni significative (>8mm) seguite da tempo stabile</p>")
+    
+    # Lag biologico e tempistiche
+    species_analysis = payload.get("species_analysis", {})
+    if "species_lags" in species_analysis:
+        lines.append("<h4>⏱️ Lag Biologico Specie-Specifico</h4>")
+        species_lags = species_analysis["species_lags"]
+        lines.append("<p><strong>Tempistiche di fruttificazione previste</strong>:</p>")
+        lines.append("<ul style='margin:8px 0 0 20px'>")
+        for species, lag_days in species_lags.items():
+            profile = SPECIES_PROFILES_V30.get(species, {})
+            lag_range = profile.get("lag_range", (5, 14))
+            lines.append(f"<li><em>B. {species}</em>: {lag_days} giorni (range normale: {lag_range[0]}-{lag_range[1]} giorni)</li>")
+        lines.append("</ul>")
+        lines.append("<p><em>I lag sono calcolati considerando umidità suolo, shock termico, VPD stress e umidità cumulativa secondo letteratura scientifica</em></p>")
+    # === FINESTRA DI FRUTTIFICAZIONE: TESTI DINAMICI (v2 plateau & bordo destro) ===
+    try:
+        from datetime import datetime, timedelta
+
+        def _it_date(d):
+            mesi = ['gennaio','febbraio','marzo','aprile','maggio','giugno','luglio','agosto','settembre','ottobre','novembre','dicembre']
+            return f"{d.day} {mesi[d.month-1]} {d.year}"
+
+        today = datetime.utcnow().date()
+        species_info = payload.get('species_analysis') or {}
+        species_forecasts = species_info.get('species_forecasts') or {}
+        species_probs = species_info.get('species_probabilities') or {}
+        primary_species = species_info.get('primary_species') or 'reticulatus'
+        flush_events = payload.get('flush_events') or []
+
+        # specie dominante oggi = massima pred al tempo 0
+        dominant = None; best0 = -1.0
+        for sp, arr in species_forecasts.items():
+            if isinstance(arr, list) and len(arr)>0 and (arr[0] is not None):
+                v0 = float(arr[0])
+                if v0 > best0:
+                    best0 = v0; dominant = sp
+        if not dominant:
+            dominant = primary_species
 
         lines.append('<h4>🪵 Finestra di Fruttificazione (dinamica)</h4>')
-        
-        THR_MINIMA = 15.0
-        
-        windows: List[FruitingWindow] = []
-        in_window = False
-        start_idx = -1
-        for i, val in enumerate(forecast):
-            if val >= THR_MINIMA and not in_window:
-                in_window = True
-                start_idx = i
-            elif val < THR_MINIMA and in_window:
-                in_window = False
-                end_idx = i - 1
-                if end_idx >= start_idx:
-                    window_slice = forecast[start_idx : end_idx + 1]
-                    peak_val = max(window_slice)
-                    peak_idx = start_idx + window_slice.index(peak_val)
-                    windows.append(FruitingWindow(start_idx, end_idx, peak_idx, peak_val))
-        if in_window:
-            window_slice = forecast[start_idx:]
-            peak_val = max(window_slice)
-            peak_idx = start_idx + window_slice.index(peak_val)
-            windows.append(FruitingWindow(start_idx, len(forecast) - 1, peak_idx, peak_val))
+        prob = species_probs.get(dominant, 0.0) if species_probs else 0.0
+        lines.append(f"<p><strong>Specie dominante oggi</strong>: <em>B. {dominant}</em>{' (prob. '+str(round(prob,2))+')' if species_probs else ''}.</p>")
 
-        current_window = next((w for w in windows if w.start_index <= 0 and w.end_index >= 0), None)
-        next_window = next((w for w in windows if w.start_index > (current_window.end_index if current_window else -1)), None)
+        arr = species_forecasts.get(dominant, [])
+        t_peak=None; v_peak=None; t_open=None; t_close=None; truncated_close=False
+        peak_start=None; peak_end=None  # plateau vicino al picco
+        if isinstance(arr, list) and arr:
+            vals = [float(x) if x is not None else None for x in arr]
+            vals_nonnull = [x for x in vals if x is not None]
+            v_peak = max(vals_nonnull) if vals_nonnull else 0.0
+            t_peak = vals.index(v_peak) if v_peak is not None and v_peak in vals else 0
 
-        if not current_window and not next_window:
-            lines.append("<p><strong>Situazione</strong>: Nessuna finestra attiva o in arrivo nei prossimi 10 giorni. Condizioni non favorevoli.</p>")
+            T_OPEN=25.0; T_CLOSE=18.0
+            thr_open = max(T_OPEN, 0.60*float(v_peak))
+            thr_close = max(T_CLOSE, 0.50*float(v_peak))
 
-        elif current_window and not next_window:
-            d_open = today
-            d_peak = today + timedelta(days=current_window.peak_index)
-            t_close_final = get_intelligent_closing_date(current_window, forecast, payload, species_info['primary_species'], today, payload['past_days'])
-            d_close = today + timedelta(days=t_close_final)
-            lines.append(f"<p><strong>Situazione</strong>: Finestra attiva. <strong>Apertura</strong> già in corso, <strong>Picco</strong> attorno al {_it_date(d_peak)}, <strong>Chiusura stimata il {_it_date(d_close)}</strong>.</p>")
+            # apertura = primo indice >= thr_open prima del picco (compreso)
+            if v_peak is not None:
+                for i in range(0, t_peak+1):
+                    vi = vals[i]
+                    if vi is not None and vi >= thr_open:
+                        t_open = i; break
 
-        elif not current_window and next_window:
-            d_open = today + timedelta(days=next_window.start_index)
-            d_peak = today + timedelta(days=next_window.peak_index)
-            t_close_final = get_intelligent_closing_date(next_window, forecast, payload, species_info['primary_species'], today, payload['past_days'])
-            d_close = today + timedelta(days=t_close_final)
-            lines.append(f"<p><strong>Situazione</strong>: Nessuna finestra attiva. <strong>Prossima finestra in arrivo</strong>: <strong>Apertura</strong> il {_it_date(d_open)}, <strong>Picco</strong> attorno al {_it_date(d_peak)}, <strong>Chiusura stimata il {_it_date(d_close)}</strong>.</p>")
-        
-        elif current_window and next_window:
-            d_peak_curr = today + timedelta(days=current_window.peak_index)
-            d_close_curr = today + timedelta(days=current_window.end_index)
-            lines.append("<h4>🍄 Finestra Attuale (in chiusura)</h4>")
-            lines.append(f"<p><strong>Apertura</strong>: già attiva, <strong>Picco</strong> passato attorno al {_it_date(d_peak_curr)}, <strong>Chiusura</strong> imminente il {_it_date(d_close_curr)}.</p>")
-            
-            d_open_next = today + timedelta(days=next_window.start_index)
-            d_peak_next = today + timedelta(days=next_window.peak_index)
-            t_close_final_next = get_intelligent_closing_date(next_window, forecast, payload, species_info['primary_species'], today, payload['past_days'])
-            d_close_next = today + timedelta(days=t_close_final_next)
-            lines.append("<h4>🔮 Finestra Futura (in arrivo)</h4>")
-            lines.append(f"<p><strong>Apertura prevista</strong> il {_it_date(d_open_next)}, con <strong>Picco</strong> attorno al {_it_date(d_peak_next)} e <strong>Chiusura stimata il {_it_date(d_close_next)}</strong>.</p>")
+            # chiusura "grezza" = ultimo indice >= thr_close dopo il picco
+            if v_peak is not None:
+                for j in range(len(vals)-1, t_peak-1, -1):
+                    vj = vals[j]
+                    if vj is not None and vj >= thr_close:
+                        t_close = j; break
 
-            lines.append("<h4>🎯 Consigli Pratici</h4><div class='return-advice'><p>Concentra la ricerca nelle prossime 24h per gli ultimi esemplari della finestra attuale. Preparati a tornare nei boschi a partire dal {_it_date(d_open_next)} per intercettare la nuova buttata.</p></div>")
-            
-        # Strategia di Ricerca Dettagliata
-        # ... (Questa sezione può essere ulteriormente dettagliata se necessario)
+            # plateau del picco: segmento contiguo >= 0.9*picco
+            if v_peak and v_peak>0:
+                hi = 0.90*v_peak
+                # espandi a sinistra
+                ps = t_peak; pe = t_peak
+                k = t_peak-1
+                while k>=0 and vals[k] is not None and vals[k] >= hi:
+                    ps = k; k -= 1
+                k = t_peak+1
+                while k < len(vals) and vals[k] is not None and vals[k] >= hi:
+                    pe = k; k += 1
+                peak_start, peak_end = ps, pe
 
-    except Exception as e:
-        logger.exception("Errore nella generazione del testo dinamico della finestra v3.4.0")
-        lines.append("<p class='muted'>[Dettagli finestra non disponibili a causa di un errore interno]</p>")
+            # Heuristiche di bordo destro: se ultimo/e punti restano alti, la chiusura è oltre l'orizzonte
+            last = vals[-1] if vals else None
+            last3 = [x for x in vals[-3:] if x is not None]
+            avg_last3 = sum(last3)/len(last3) if last3 else None
+            slope_last = None
+            if len(vals)>=2 and vals[-1] is not None and vals[-2] is not None:
+                slope_last = vals[-1] - vals[-2]
+
+            beyond = False
+            if v_peak and last is not None:
+                if last >= 0.85*v_peak:
+                    beyond = True
+                if avg_last3 is not None and avg_last3 >= 0.75*v_peak:
+                    beyond = True
+                if slope_last is not None and slope_last >= -0.5:
+                    beyond = True
+
+            # Retrodatazione apertura usando flush osservati
+            t_open_real_date = None
+            last_obs = None
+            for ev in flush_events:
+                if ev.get('observed'):
+                    if (not last_obs) or (ev.get('event_day_index', -10**9) > last_obs.get('event_day_index', -10**9)):
+                        last_obs = ev
+            try:
+                if last_obs:
+                    when_str = str(last_obs.get('event_when',''))
+                    ev_date = datetime.fromisoformat(when_str).date() if '-' in when_str else None
+                    ev_lag = int(last_obs.get('lag_days') or 0)
+                    if ev_date and ev_lag>0:
+                        t_open_real_date = ev_date + timedelta(days=int(round(0.8*ev_lag)))
+            except Exception:
+                t_open_real_date = None
+
+            # Fallback: se oggi sopra soglia e pendenza negativa, apertura 1–3gg fa
+            if t_open_real_date is None:
+                slope = 0.0
+                if len(vals)>=2 and vals[0] is not None and vals[1] is not None:
+                    slope = vals[1] - vals[0]
+                if vals and vals[0] is not None and vals[0]>=thr_open and slope<0:
+                    denom = abs(slope) if abs(slope)>1e-3 else 1.0
+                    delta = int(round(min(3.0, max(1.0, (vals[0]-thr_open)/denom))))
+                    t_open_real_date = today - timedelta(days=delta)
+
+            # Costruzione messaggi
+            parts = []
+
+            # Apertura (reale o prevista)
+            if t_open_real_date and (t_open is None or t_open==0) and t_open_real_date < today:
+                days_ago = (today - t_open_real_date).days
+                parts.append(f"<strong>Apertura</strong>: già iniziata il {_it_date(t_open_real_date)} (≈ {days_ago} giorni fa)")
+            elif t_open is not None:
+                d = today + timedelta(days=int(t_open))
+                if t_open==0:
+                    parts.append(f"<strong>Apertura</strong>: oggi ({_it_date(d)})")
+                elif t_open<0:
+                    parts.append(f"<strong>Apertura</strong>: già avvenuta ({_it_date(d)})")
+                else:
+                    parts.append(f"<strong>Apertura</strong>: {_it_date(d)} (≈ tra {t_open} giorni)")
+            elif t_open_real_date:
+                if t_open_real_date <= today:
+                    days_ago = (today - t_open_real_date).days
+                    parts.append(f"<strong>Apertura</strong>: già iniziata il {_it_date(t_open_real_date)} (≈ {days_ago} giorni fa)")
+                else:
+                    days_to = (t_open_real_date - today).days
+                    parts.append(f"<strong>Apertura</strong>: {_it_date(t_open_real_date)} (≈ tra {days_to} giorni)")
+
+            # Picco (singolo o intervallo)
+            if peak_start is not None and peak_end is not None and peak_end>peak_start:
+                d1 = today + timedelta(days=int(peak_start))
+                d2 = today + timedelta(days=int(peak_end))
+                parts.append(f"<strong>Picco</strong>: {_it_date(d1)}–{_it_date(d2)} (plateau)")
+            elif t_peak is not None:
+                parts.append(f"<strong>Picco</strong>: {_it_date(today + timedelta(days=int(t_peak)))}")
+
+            # Chiusura con gestione bordo destro
+            if beyond:
+                parts.append("<strong>Chiusura</strong>: oltre l’orizzonte di 10 giorni (prosecuzione attesa)")
+                durata = None
+                if t_open is not None:
+                    durata = (len(vals)-1) - max(0, int(t_open))
+                if durata is not None and durata>=0:
+                    parts.append(f"<span class='muted'>Durata osservabile: ≥ {durata} giorni</span>")
+                    # Stima data di chiusura oltre l'orizzonte (fit lineare sulla coda se c'è calo)
+                    try:
+                        import math
+                        n = len(vals)
+                        k = 4 if n >= 4 else max(2, n-1)
+                        xs = list(range(n-k, n))
+                        ys = [vals[i] for i in xs]
+                        # forza monotonia decrescente sulla coda (se plateau, rimane invariata)
+                        for i in range(1, len(ys)):
+                            if ys[i] is not None and ys[i-1] is not None:
+                                ys[i] = min(ys[i], ys[i-1])
+                        # calcolo pendenza media
+                        deltas = []
+                        for i in range(1, len(ys)):
+                            if ys[i] is not None and ys[i-1] is not None:
+                                deltas.append(ys[i]-ys[i-1])
+                        slope = sum(deltas)/len(deltas) if deltas else 0.0  # valore giornaliero (negativo in discesa)
+                        # soglia di chiusura locale
+                        thr_local = thr_close
+                        lastv = vals[-1] if vals and vals[-1] is not None else v_peak
+                        extra = 0
+                        if slope < -0.5:  # discesa chiara
+                            extra = math.ceil( max(1.0, (lastv - thr_local) / abs(slope)) )
+                        else:
+                            # plateau o calo molto lento: estensione conservativa 2–5 giorni in funzione di quanto si è sopra soglia
+                            over = max(0.0, lastv - thr_local)
+                            if over >= 0.35*v_peak:
+                                extra = 5
+                            elif over >= 0.2*v_peak:
+                                extra = 4
+                            elif over >= 0.1*v_peak:
+                                extra = 3
+                            else:
+                                extra = 2
+                        d_est = today + timedelta(days=(n-1)+int(extra))
+                        parts.append(f"<span class='muted'>Stima chiusura</span>: {_it_date(d_est)} (oltre previsione, ±1–2g)")
+                    except Exception:
+                        pass
+    
+            elif t_close is not None:
+                d_close = today + timedelta(days=int(t_close))
+                durata = max(0, int(t_close) - max(0, int(t_open or 0)))
+                parts.append(f"<strong>Chiusura</strong>: {_it_date(d_close)} (≈ {durata} giorni di finestra)")
+
+            if parts:
+                lines.append('<p>'+ '. '.join(parts) +'.</p>')
+
+            # Fase odierna
+            fase = 'fuori finestra'
+            if t_open is not None and (t_close is not None or beyond):
+                eff_close = (t_close if not beyond else max(len(vals)-1, t_peak or 0))
+                if (t_open <= 0 <= eff_close):
+                    if v_peak and vals[0] is not None and vals[0] >= 0.95*float(v_peak):
+                        fase = 'pieno (plateau prolungato)' if beyond else 'pieno (picco oggi)'
+                    else:
+                        denom = max(1.0, (eff_close - (t_open or 0)))
+                        rel = (0 - (t_open or 0)) / denom
+                        slope0 = 0.0
+                        if len(vals)>=2 and vals[0] is not None and vals[1] is not None:
+                            slope0 = vals[1] - vals[0]
+                        if rel < 1/3 and slope0 >= 0:
+                            fase = 'fase iniziale (in apertura)'
+                        elif rel < 2/3 and abs(slope0) < 1.0:
+                            fase = 'pieno (plateau)'
+                        else:
+                            fase = 'fase finale (in chiusura)'
+                elif (t_open is None or t_open>0):
+                    fase = 'pre-finestra (rampa)'
+            lines.append(f"<p><strong>Situazione oggi</strong>: {fase}.</p>")
+
+            # Consigli sintetici
+            tips = []
+            if beyond or (v_peak and vals[0] is not None and vals[0] >= 0.9*v_peak):
+                tips.append("Plateau alto: verifica siti ogni 24–36 h; privilegia microdepressioni umide e margini prato-bosco")
+            if t_open is not None and t_open>0:
+                tips.append("In attesa dell’apertura: monitorare precipitazioni efficaci (>8–10 mm/24–48 h) per un avvio netto")
+            tips.append("Se caldo secco/VPD alto: preferisci versanti N–NE e prime ore del mattino")
+            if tips:
+                lines.append("<ul>" + "".join([f"<li>{t}</li>" for t in tips]) + "</ul>")
+
+    except Exception as _ex:
+                    lines.append("<p class='muted'>[Nota: impossibile calcolare i dettagli dinamici della finestra in questa istanza]</p>")
+            # === FINE BLOCCO DINAMICO ===    
+    # Note finali scientifiche
+    lines.append("<h4>📚 Base Scientifica</h4>")
+    lines.append("<p><em>Questo modello integra evidenze da:</em></p>")
+    lines.append("<ul style='margin:8px 0 0 20px'>")
+    lines.append("<li>Borgotaro (Parma): Documentata coesistenza di 4 specie di porcini nella stessa area</li>")
+    lines.append("<li>Van der Linde (2004): Studio morfologico e filogenetico europeo</li>")
+    lines.append("<li>Leonardi et al. (2005): Analisi molecolare ITS del complesso B. edulis</li>")
+    lines.append("<li>Studi di sovrapposizione ecologica in ecosistemi mediterranei e temperati</li>")
+    lines.append("</ul>")
     
     return "\n".join(lines)
 
@@ -1188,164 +1795,431 @@ async def api_score_multi_species(
     aspect: str = Query("", description="Esposizione manuale"),
     autoaspect: int = Query(1, description="1=automatico DEM"),
     advanced_lag: int = Query(0, description="1=lag biologico avanzato"),
-    use_era5: int = Query(0, description="1=abilita ERA5-Land"),
+    use_era5: int = Query(0, description="1=abilita ERA5-Land"), # Modificato per coerenza
     background_tasks: BackgroundTasks = None
 ):
+    """
+    🚀 ENDPOINT MULTI-SPECIE v3.2.1
+    Sistema a curve multiple con durata della buttata variabile
+    """
     start_time = time.time()
+    
     try:
-        weather_data, elev_data, osm_habitat_data = await asyncio.gather(
-            fetch_hybrid_weather_data(lat, lon, 20, 10, bool(use_era5)),
+        logger.info(f"Multi-species analysis for ({lat:.4f}, {lon:.4f}) - ERA5: {bool(use_era5)}")
+        
+        # Fetch dati in parallelo
+        tasks = [
+            fetch_hybrid_weather_data(lat, lon, total_past_days=20, future_days=10, enable_era5=bool(use_era5)),
             fetch_elevation_grid_super_advanced(lat, lon),
-            fetch_osm_habitat_super_advanced(lat, lon) if autohabitat == 1 else asyncio.sleep(0, result=("misto", 0.15, {}))
-        )
+        ]
         
-        elev_m, slope_deg, _, aspect_oct, concavity, drainage_proxy = elev_data
-        
-        aspect_used, aspect_source = aspect_oct or "", "automatico DEM"
-        if autoaspect == 0 and normalize_octant(aspect):
-            aspect_used, aspect_source = normalize_octant(aspect), "manuale"
-        
-        habitat_used, habitat_source, habitat_confidence = (habitat or "").strip().lower(), "manuale", 0.6
         if autohabitat == 1:
-            auto_habitat, auto_conf, _ = osm_habitat_data
+            tasks.append(fetch_osm_habitat_super_advanced(lat, lon))
+        
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+        
+        weather_data = results[0] if not isinstance(results[0], Exception) else {}
+        elev_data = results[1] if not isinstance(results[1], Exception) else (800.0, 8.0, 180.0, "S", 0.0, 1.0)
+        
+        if autohabitat == 1 and len(results) > 2:
+            osm_habitat_data = results[2] if not isinstance(results[2], Exception) else ("misto", 0.15, {})
+        else:
+            osm_habitat_data = ("misto", 0.15, {})
+        
+        elev_m, slope_deg, aspect_deg, aspect_oct, concavity, drainage_proxy = elev_data
+        
+        # Esposizione
+        aspect_source = "automatico DEM"
+        aspect_used = aspect_oct or ""
+        if autoaspect == 0:
+            manual_oct = normalize_octant(aspect)
+            if manual_oct:
+                aspect_used = manual_oct
+                aspect_source = "manuale"
+        
+        # Habitat
+        habitat_used = (habitat or "").strip().lower()
+        habitat_source = "manuale"
+        habitat_confidence = 0.6
+        auto_scores = {}
+        
+        if autohabitat == 1:
+            auto_habitat, auto_conf, auto_scores = osm_habitat_data
             if not habitat_used and auto_habitat:
-                habitat_used, habitat_confidence, habitat_source = auto_habitat, auto_conf, f"OSM (conf {auto_conf:.2f})"
-        if not habitat_used: habitat_used = "misto"
-
+                habitat_used = auto_habitat
+                habitat_confidence = auto_conf
+                habitat_source = f"automatico OSM (conf {auto_conf:.2f})"
+            elif habitat_used:
+                habitat_source = "manuale (override)"
+        
+        if not habitat_used:
+            habitat_used = "misto"
+        
+        # Sistema meteorologico
+        if not weather_data or "daily" not in weather_data:
+            raise HTTPException(500, "Errore sistema meteorologico ibrido")
+        
+        weather_quality = weather_data.get("metadata", {}).get("quality_score", 0.5)
+        weather_sources = weather_data.get("metadata", {}).get("sources", {})
+        era5_data = weather_data.get("era5_data")
+        
         daily = weather_data["daily"]
-        P_series, Tmin_series, Tmax_series, Tmean_series, RH_series, ET0_series = (
-            daily["precipitation_sum"], daily["temperature_2m_min"], daily["temperature_2m_max"],
-            daily["temperature_2m_mean"], daily["relative_humidity_2m_mean"], daily["et0_fao_evapotranspiration"]
-        )
+        time_series = daily["time"]
+        P_series = [float(x or 0.0) for x in daily["precipitation_sum"]]
+        Tmin_series = [float(x or 0.0) for x in daily["temperature_2m_min"]]
+        Tmax_series = [float(x or 0.0) for x in daily["temperature_2m_max"]]
+        Tmean_series = [float(x or 0.0) for x in daily.get("temperature_2m_mean", [])]
+        if not Tmean_series or not any(Tmean_series):
+            Tmean_series = [(mn + mx) / 2.0 for mn, mx in zip(Tmin_series, Tmax_series)]
+        ET0_series = daily.get("et0_fao_evapotranspiration", [2.0] * len(P_series))
+        RH_series = daily.get("relative_humidity_2m_mean", [65.0] * len(P_series))
         
-        past_days, future_days = 20, 10
-        P_past, Tmean_past = P_series[:past_days], Tmean_series[:past_days]
-        Tmean_future, RH_future = Tmean_series[past_days:], RH_series[past_days:]
-
+        past_days = 20
+        future_days = 10
+        
+        P_past = P_series[:past_days]
+        P_future = P_series[past_days:past_days + future_days]
+        Tmean_past = Tmean_series[:past_days]
+        Tmean_future = Tmean_series[past_days:past_days + future_days]
+        Tmin_past = Tmin_series[:past_days]
+        Tmax_past = Tmax_series[:past_days]
+        RH_past = RH_series[:past_days]
+        RH_future = RH_series[past_days:past_days + future_days]
+        # Serie mesi per ogni giorno (20 passati + 10 futuri)
         base_date = datetime.now(timezone.utc).date()
-        months_series = [(base_date - timedelta(days=(past_days - 1 - i))).month if i < past_days else (base_date + timedelta(days=(i - past_days + 1))).month for i in range(len(P_series))]
-        future_dates = [(base_date + timedelta(days=i+1)) for i in range(future_days)]
-        doys_future = [d.timetuple().tm_yday for d in future_dates]
+        months_series = []
+        for i in range(len(P_series)):
+            if i < past_days:
+                day = base_date - timedelta(days=(past_days - 1 - i))
+            else:
+                day = base_date + timedelta(days=(i - past_days + 1))
+            months_series.append(day.month)
+        # DOY futuri e smoothing adattivo
+        future_dates = [ (datetime.now(timezone.utc).date() + timedelta(days=i+1)) for i in range(future_days) ]
+        doys_future = [ d.timetuple().tm_yday for d in future_dates ]
+        doy_median = sorted(doys_future)[len(doys_future)//2]
+        win_len = 5 if doy_median < 260 else 7
+        doy_today = datetime.now(timezone.utc).date().timetuple().tm_yday
         
-        api_value = api_index(P_past, half)
-        smi_series = smi_from_p_et0_advanced(P_series, ET0_series, weather_data.get("era5_data"))
-        smi_current = smi_series[past_days - 1]
-        cumulative_moisture_series = cumulative_moisture_index(P_series)
-        cumulative_moisture_current = cumulative_moisture_series[past_days - 1]
+        # Calcoli avanzati
+        api_value = api_index(P_past, half_life=half)
+        smi_series = smi_from_p_et0_advanced(P_series, ET0_series, era5_data)
+        smi_current = smi_series[past_days - 1] if past_days - 1 < len(smi_series) else 0.5
         
-        tmean7 = sum(Tmean_past[-7:]) / 7
-        thermal_shock = thermal_shock_index_advanced(Tmin_series[:past_days])
-        vpd_current = vpd_hpa(Tmean_future[0], RH_future[0]) if Tmean_future and RH_future else 5.0
-
-        month_current = base_date.month
+        cumulative_moisture_series = cumulative_moisture_index(P_series, days_window=14)
+        cumulative_moisture_current = cumulative_moisture_series[past_days - 1] if past_days - 1 < len(cumulative_moisture_series) else 0.0
+        
+        tmean_7d = sum(Tmean_past[-7:]) / max(1, len(Tmean_past[-7:]))
+        tmean_14d = sum(Tmean_past[-14:]) / max(1, len(Tmean_past[-14:])) if len(Tmean_past) else tmean_7d
+        tmean7 = 0.7 * tmean_7d + 0.3 * tmean_14d
+        thermal_shock = thermal_shock_index_advanced(Tmin_past, window_days=3)
+        rh_7d = sum(RH_past[-7:]) / max(1, len(RH_past[-7:]))
+        vpd_series_future = [vpd_hpa(Tmean_future[i], RH_future[i]) for i in range(min(len(Tmean_future), len(RH_future)))]
+        vpd_current = vpd_series_future[0] if vpd_series_future else 5.0
+        
+        month_current = datetime.now(timezone.utc).month
         microclimate_energy = microclimate_energy_advanced(aspect_used or aspect_oct, slope_deg, month_current, lat, elev_m)
+        k_aspect = 0.35 if aspect_source.startswith("automatico") else 1.0
+        microclimate_energy = blend_to_neutral(microclimate_energy, 1.0, k_aspect)
+        twi_index = twi_advanced_proxy(slope_deg, concavity, drainage_proxy)
         
+        # SISTEMA MULTI-SPECIE
         species_probabilities = calculate_species_probabilities(habitat_used, month_current, elev_m, aspect_oct, lat)
         coexistence_scenario = determine_coexistence_scenario(species_probabilities)
+        
+        # Specie primaria e secondaria
         sorted_species = sorted(species_probabilities.items(), key=lambda x: x[1], reverse=True)
-        primary_species = sorted_species[0][0]
+        primary_species = sorted_species[0][0] if sorted_species else "reticulatus"
         secondary_species = sorted_species[1][0] if len(sorted_species) > 1 and sorted_species[1][1] > 0.25 else ""
+        primary_probability = sorted_species[0][1] if sorted_species else 1.0
         
+        logger.info(f"Species analysis: {primary_species} ({primary_probability:.2f}) + {secondary_species} - {coexistence_scenario}")
+        
+        # Calcola lag per specie significative
         species_lags = calculate_weighted_lag(species_probabilities, smi_current, thermal_shock, tmean7, vpd_current/10.0, cumulative_moisture_current)
-        rain_events = detect_rain_events_multi_species(P_series, smi_series, month_current, elev_m, lat, cumulative_moisture_series, months_series)
         
+        # Eventi piovosi
+        rain_events = detect_rain_events_multi_species(P_past + P_future, smi_series, month_current, elev_m, lat, cumulative_moisture_series, months_series)
+        
+        # Genera forecast per specie multiple
         forecast_combined = [0.0] * future_days
         species_forecasts = {}
+        flush_events_details = []
+        species_today_scores = {}
+        dominant_species_today = None
         
         for species, probability in species_probabilities.items():
-            if probability < 0.05: continue
-            species_forecast = [0.0] * future_days
-            profile = SPECIES_PROFILES_V30[species]
-            for event_idx, event_mm, event_strength in rain_events:
-                lag_days = species_lags.get(species, 8)
-                peak_idx = event_idx + lag_days
-                amplitude = event_strength * microclimate_energy * probability * (min(1.6, max(0.6, (event_mm / profile["min_precip_flush"])**0.85)))
+            if probability < 0.05:
+                continue
                 
-                # Durata dinamica
+            species_forecast = [0.0] * future_days
+            species_profile = SPECIES_PROFILES_V30[species]
+            
+            for event_idx, event_mm, event_strength in rain_events:
+                # La logica del lag e dell'ampiezza rimane INVARIATA
+                lag_days = species_lags.get(species, 8)
+                # ... altre micro-correzioni del lag ...
+                try:
+                    include_aspect_lag = True
+                except Exception:
+                    include_aspect_lag = True
+                if include_aspect_lag:
+                    oct2deg = {"N":0,"NE":45,"E":90,"SE":135,"S":180,"SW":225,"W":270,"NW":315}
+                    a_deg = oct2deg.get(aspect_used, 180)
+                    northness = math.cos(math.radians(a_deg))
+                    is_summer = (doy_today < 260)
+                    w_src = 1.0 if aspect_source == "manuale" else 0.5
+                    base_shift = 0.6
+                    delta = base_shift * w_src * abs(northness)
+                    effect = (-delta if northness>0 else +delta) if is_summer else (+delta if northness>0 else -delta)
+                    lag_days = int(round(max(2.0, min(18.0, lag_days + effect))))
+
+                peak_idx = event_idx + lag_days
+                base_amplitude = event_strength * microclimate_energy * probability
+                
+                if event_idx >= past_days:
+                    future_idx = event_idx - past_days
+                    vpd_penalty_val = vpd_penalty_advanced(vpd_series_future[future_idx], species_profile["vpd_sens"], elev_m) if future_idx < len(vpd_series_future) else 1.0
+                else:
+                    vpd_penalty_val = 1.0
+                
+                final_amplitude = base_amplitude * vpd_penalty_val
+                mpf = species_profile.get("min_precip_flush", 8.5)
+                flush_scale = min(1.6, max(0.6, (event_mm / mpf) ** 0.85))
+                final_amplitude *= flush_scale
+
+                # --- INIZIO NUOVA LOGICA: Durata Dinamica della Finestra di Fruttificazione ---
+                # 1. Calcola il sigma di base in base alla forza dell'evento (logica invariata)
                 sigma_base = 2.2 if event_strength > 0.8 else 1.8
-                tm_opt_min, tm_opt_max = profile["tm7_opt"]
-                giorno_pioggia, giorno_picco = event_idx, peak_idx
-                mod_incubazione, mod_raccolta = 1.0, 1.0
+
+                # 2. Recupera i parametri ottimali per la specie corrente
+                tm_opt_min, tm_opt_max = species_profile["tm7_opt"]
+
+                # 3. Inizializza i modificatori a un valore neutro
+                mod_incubazione = 1.0
+                mod_raccolta = 1.0
+
+                # 4. Calcola il "Fattore Qualità Incubazione" (Specie-Specifico con VPD)
+                giorno_pioggia = event_idx
+                giorno_picco = peak_idx
                 if giorno_picco < len(Tmean_series):
                     temps_incubazione = Tmean_series[giorno_pioggia:giorno_picco]
+                    rh_incubazione = RH_series[giorno_pioggia:giorno_picco]
                     if temps_incubazione:
                         temp_media_incubazione = sum(temps_incubazione) / len(temps_incubazione)
-                        if tm_opt_min < temp_media_incubazione < tm_opt_max: mod_incubazione = 1.15
-                        elif temp_media_incubazione > tm_opt_max + 2.0 or temp_media_incubazione < tm_opt_min - 2.0: mod_incubazione = 0.85
+                        
+                        fattore_temp_incubazione = 1.0
+                        if tm_opt_min < temp_media_incubazione < tm_opt_max:
+                            fattore_temp_incubazione = 1.15
+                        elif temp_media_incubazione > tm_opt_max + 2.0 or temp_media_incubazione < tm_opt_min - 2.0:
+                            fattore_temp_incubazione = 0.85
+
+                        vpd_values = [vpd_hpa(temps_incubazione[i], rh_incubazione[i]) for i in range(len(temps_incubazione))]
+                        vpd_medio_incubazione = sum(vpd_values) / len(vpd_values) if vpd_values else 10.0
+                        compensazione_vpd = 1.10 if vpd_medio_incubazione < 7.0 else 0.90 if vpd_medio_incubazione > 15.0 else 1.0
+                        mod_incubazione = fattore_temp_incubazione * compensazione_vpd
+
+                # 5. Calcola il "Fattore Conservazione Fruttificazione" (Specie-Specifico con VPD)
                 if giorno_picco < len(Tmean_series) - 4:
                     temps_raccolta = Tmean_series[giorno_picco : giorno_picco + 4]
+                    rh_raccolta = RH_series[giorno_picco : giorno_picco + 4]
                     if temps_raccolta:
                         temp_media_raccolta = sum(temps_raccolta) / len(temps_raccolta)
-                        if temp_media_raccolta > tm_opt_max + 1.0: mod_raccolta = 0.80
-                        elif temp_media_raccolta < tm_opt_min: mod_raccolta = 1.20
-                sigma = clamp(sigma_base * mod_incubazione * mod_raccolta, sigma_base * 0.5, sigma_base * 1.5)
+
+                        fattore_temp_raccolta = 1.0
+                        if temp_media_raccolta > tm_opt_max + 1.0:
+                            fattore_temp_raccolta = 0.80
+                        elif temp_media_raccolta < tm_opt_min:
+                            fattore_temp_raccolta = 1.20
+
+                        vpd_values = [vpd_hpa(temps_raccolta[i], rh_raccolta[i]) for i in range(len(temps_raccolta))]
+                        vpd_medio_raccolta = sum(vpd_values) / len(vpd_values) if vpd_values else 10.0
+                        compensazione_vpd = 1.15 if vpd_medio_raccolta < 5.0 else 0.85 if vpd_medio_raccolta > 12.0 else 1.0
+                        mod_raccolta = fattore_temp_raccolta * compensazione_vpd
+
+                # 6. Calcola il sigma finale, specifico per questa specie e queste condizioni
+                sigma = sigma_base * mod_incubazione * mod_raccolta
+                sigma = clamp(sigma, sigma_base * 0.5, sigma_base * 1.5)
+                # --- FINE NUOVA LOGICA ---
+                
+                skew = 0.3 if species in ["aereus", "reticulatus"] else 0.1
                 
                 for day_idx in range(future_days):
                     abs_day_idx = past_days + day_idx
-                    kernel = gaussian_kernel_advanced(abs_day_idx, peak_idx, sigma)
-                    pheno = phenology_weight(species, doys_future[day_idx], elev_m)
-                    species_forecast[day_idx] += 100.0 * amplitude * kernel * pheno
-            
-            species_forecast_smoothed = savitzky_golay_advanced([clamp(v, 0, 100) for v in species_forecast])
+                    kernel_value = gaussian_kernel_advanced(abs_day_idx, peak_idx, sigma, skewness=skew)
+                    w_phen = phenology_weight(species, doys_future[day_idx], elev_m)
+                    species_forecast[day_idx] += 100.0 * final_amplitude * kernel_value * w_phen
+                
+                if species == primary_species:
+                    when_str = time_series[event_idx] if event_idx < len(time_series) else f"+{event_idx - past_days + 1}d"
+                    flush_events_details.append({
+                        "event_day_index": event_idx, "event_when": when_str, "event_mm": round(event_mm, 1),
+                        "event_strength": round(event_strength, 2), "lag_days": lag_days, "species": species,
+                        "observed": event_idx < past_days,
+                        "final_sigma": round(sigma, 2) # Aggiungiamo per debug
+                    })
+
+            species_forecast_clamped = [clamp(v, 0.0, 100.0) for v in species_forecast]
+            species_forecast_smoothed = savitzky_golay_advanced(species_forecast_clamped, window_length=win_len)
             species_forecasts[species] = [int(round(x)) for x in species_forecast_smoothed]
+            
             for i in range(future_days):
                 forecast_combined[i] += species_forecast_smoothed[i] * probability
         
         forecast_final = [int(round(clamp(x, 0, 100))) for x in forecast_combined]
-        current_index = forecast_final[0]
         
-        threshold, fruiting_window_start, fruiting_window_end = 15, -1, -1
+        best_window = {"start": 0, "end": 2, "mean": 0}
+        if len(forecast_final) >= 3:
+            best_mean = 0
+            for i in range(len(forecast_final) - 2):
+                window_mean = sum(forecast_final[i:i+3]) / 3.0
+                if window_mean > best_mean:
+                    best_mean = window_mean
+                    best_window = {"start": i, "end": i+2, "mean": int(round(window_mean))}
+        
+        current_index = forecast_final[0] if forecast_final else 0
+        
+        # ===== NUOVA LOGICA: CALCOLO FINESTRA DI FRUTTIFICAZIONE COMPLETA =====
+        fruiting_window_start = -1
+        fruiting_window_end = -1
+        threshold = 15  # Soglia per considerare una finestra "attiva"
         if any(v > threshold for v in forecast_final):
-            fruiting_window_start = next((i for i, v in enumerate(forecast_final) if v > threshold), -1)
-            fruiting_window_end = len(forecast_final) - 1 - next((i for i, v in enumerate(reversed(forecast_final)) if v > threshold), len(forecast_final))
+            try:
+                fruiting_window_start = next(i for i, v in enumerate(forecast_final) if v > threshold)
+                fruiting_window_end = len(forecast_final) - 1 - next(i for i, v in enumerate(reversed(forecast_final)) if v > threshold)
+            except StopIteration:
+                # Fallback nel caso la logica fallisca
+                fruiting_window_start = -1
+                fruiting_window_end = -1
+        # ===== FINE NUOVA LOGICA =====
 
-        has_validations, _, _ = check_recent_validations_super_advanced(lat, lon)
+        has_validations, validation_count, validation_accuracy = check_recent_validations_super_advanced(lat, lon)
+        
+        coexistence_stability = 1.0 - (len(species_probabilities) - 1) * 0.1
+        era5_bonus = weather_sources.get("era5_quality", 0.0)
+        
         confidence_5d = confidence_5d_multi_species(
-            weather_agreement=weather_data['metadata']['quality_score'], habitat_confidence=habitat_confidence,
-            smi_reliability=0.9 if weather_data.get("era5_data") else 0.75, vpd_validity=(vpd_current <= 12.0),
-            has_recent_validation=has_validations
+            weather_agreement=weather_quality, habitat_confidence=habitat_confidence,
+            smi_reliability=0.9 if era5_data else 0.75, vpd_validity=(vpd_current <= 12.0),
+            has_recent_validation=has_validations, coexistence_stability=coexistence_stability,
+            era5_quality=era5_bonus
         )
+        
+        def estimate_harvest_multi_species(index: int, confidence: float, hours_on_field: int, species_probs: dict) -> Tuple[str, str]:
+            base_potential = index * confidence
+            diversity_bonus = 1.0 + (len(species_probs) - 1) * 0.15
+            spot_potential = base_potential * diversity_bonus
+
+            if spot_potential > 80: finds_per_hour_min, finds_per_hour_max = 2.0, 4.0
+            elif spot_potential > 60: finds_per_hour_min, finds_per_hour_max = 1.0, 2.2
+            elif spot_potential > 40: finds_per_hour_min, finds_per_hour_max = 0.6, 1.4
+            elif spot_potential > 25: finds_per_hour_min, finds_per_hour_max = 0.3, 0.9
+            else: finds_per_hour_min, finds_per_hour_max = 0.1, 0.4
+
+            expected_min = int(round(finds_per_hour_min * hours_on_field))
+            expected_max = max(expected_min, int(round(finds_per_hour_max * hours_on_field)))
+            
+            if expected_min == expected_max: mushroom_estimate_str = f"~{expected_min} porcini" if expected_min > 0 else "0-1 porcini"
+            elif expected_max > 15: mushroom_estimate_str = f"{expected_min}+ porcini"
+            else: mushroom_estimate_str = f"{expected_min}-{expected_max} porcini"
+
+            final_search_score = spot_potential * (hours_on_field / 4.0)
+            
+            if final_search_score > 85: label = "Eccellente"
+            elif final_search_score > 55: label = "Buono"
+            elif final_search_score > 30: label = "Moderato"
+            elif final_search_score > 15: label = "Scarso"
+            else: label = "Molto scarso"
+                
+            return label, mushroom_estimate_str
+        
+        def estimate_sizes_multi_species(events, tmean, rh, species_probs):
+            total_size, total_weight, size_ranges = 0.0, 0.0, []
+            for species, prob in species_probs.items():
+                if prob < 0.05: continue
+                profile = SPECIES_PROFILES_V30[species]
+                if tmean < 15 and rh > profile["humidity_requirement"]: species_size, species_range = 14, [10, 18]
+                elif tmean > 20 or rh < profile["humidity_requirement"]: species_size, species_range = 8, [5, 12]
+                else: species_size, species_range = 11, [7, 15]
+                total_size += species_size * prob
+                total_weight += prob
+                size_ranges.extend(species_range)
+            avg_size = int(total_size / total_weight) if total_weight > 0 else 11
+            overall_range = [min(size_ranges), max(size_ranges)] if size_ranges else [7, 15]
+            return {"avg_size": avg_size, "size_class": "Variabile", "size_range": overall_range}
+
+        harvest_estimate, harvest_note = estimate_harvest_multi_species(current_index, confidence_5d["overall"], hours, species_probabilities)
+        size_estimates = estimate_sizes_multi_species(flush_events_details, tmean7, rh_7d, species_probabilities)
+        
+        processing_time = round((time.time() - start_time) * 1000, 1)
+        
+        weather_past_table = { time_series[i]: {"precipitation_mm": round(P_past[i], 1), "temp_min": round(Tmin_past[i], 1), "temp_max": round(Tmax_past[i], 1), "temp_mean": round(Tmean_past[i], 1)} for i in range(min(past_days, len(time_series))) }
+        weather_future_table = { (time_series[past_days + i] if past_days + i < len(time_series) else f"+{i+1}d"): {"precipitation_mm": round(P_future[i], 1) if i < len(P_future) else 0.0, "temp_min": round(Tmin_series[past_days + i], 1) if past_days + i < len(Tmin_series) else 0.0, "temp_max": round(Tmax_series[past_days + i], 1) if past_days + i < len(Tmax_series) else 0.0, "temp_mean": round(Tmean_future[i], 1) if i < len(Tmean_future) else 0.0} for i in range(future_days) }
         
         response_payload = {
             "lat": lat, "lon": lon, "elevation_m": round(elev_m), "slope_deg": round(slope_deg, 1),
-            "aspect_octant": aspect_used or (aspect_oct or "N/A"),
-            "index": current_index, "forecast": forecast_final,
-            "fruiting_window_start": fruiting_window_start, "fruiting_window_end": fruiting_window_end,
+            "aspect_deg": round(aspect_deg, 1), "aspect_octant": aspect_used or (aspect_oct or "N/A"), "aspect_source": aspect_source,
+            "API_star_mm": round(api_value, 1), "P7_mm": round(sum(P_past[-7:]), 1), "P20_mm": round(sum(P_past), 1),
+            "Tmean7_c": round(tmean_7d, 1), "RH7_pct": round(rh_7d, 1), "thermal_shock_index": round(thermal_shock, 2),
+            "smi_current": round(smi_current, 2), "vpd_current_hpa": round(vpd_current, 1), "cumulative_moisture_index": round(cumulative_moisture_current, 1),
+            "index": current_index, "forecast": forecast_final, 
+            "best_window": best_window,
+            "fruiting_window_start": fruiting_window_start, # NUOVO DATO
+            "fruiting_window_end": fruiting_window_end,     # NUOVO DATO
             "confidence_detailed": confidence_5d,
             "species_analysis": {
                 "primary_species": primary_species, "secondary_species": secondary_species,
-                "species_probabilities": species_probabilities, "species_forecasts": species_forecasts, 
-                "species_lags": species_lags, "coexistence_scenario": coexistence_scenario
+                "species_probabilities": {k: round(v, 3) for k, v in species_probabilities.items()},
+                "species_forecasts": species_forecasts, "species_lags": species_lags, "coexistence_scenario": coexistence_scenario,
+                "coexistence_probability": round(1.0 - primary_probability, 2) if len(species_probabilities) > 1 else 0.0
             },
-            "model_version": "3.4.0",
-            # Passiamo dati necessari per i calcoli idrici nella funzione di analisi testuale
-            "daily": daily,
-            "past_days": past_days
+            "harvest_estimate": harvest_estimate, "harvest_note": harvest_note, "size_cm": size_estimates["avg_size"],
+            "size_class": size_estimates["size_class"], "size_range_cm": size_estimates["size_range"],
+            "habitat_used": habitat_used, "habitat_source": habitat_source, "habitat_confidence": round(habitat_confidence, 3),
+            "flush_events": flush_events_details, "total_events_detected": len(rain_events),
+            "weather_past": weather_past_table, "weather_future": weather_future_table,
+            "has_local_validations": has_validations, "validation_count": validation_count,
+            "model_version": "3.2.1", "model_type": "multi_species_dynamic_duration",
+            "processing_time_ms": processing_time, "timestamp": datetime.now(timezone.utc).isoformat(),
+            "weather_sources": weather_sources, "weather_quality_score": round(weather_quality, 3), "era5_enabled": bool(use_era5),
+            "diagnostics": {
+                "era5_land_used": bool(era5_data), "species_count": len(species_probabilities),
+                "coexistence_detected": coexistence_scenario != "dominanza_netta", "weather_enhancement": bool(era5_bonus > 0),
+                "scientific_improvements": { "dynamic_fruiting_window": True }
+            }
         }
         
-        response_payload["dynamic_explanation"] = build_analysis_multi_species_v340(response_payload)
+        response_payload["dynamic_explanation"] = build_analysis_multi_species_v30(response_payload)
         
-        del response_payload["daily"] # Rimuoviamo i dati grezzi dalla risposta finale
-        del response_payload["past_days"]
-
         if background_tasks:
-            background_tasks.add_task(save_prediction_multi_species, lat, lon, datetime.now().date().isoformat(),
-                                      primary_species, secondary_species, 1.0 - species_probabilities.get(primary_species, 1.0),
-                                      current_index, confidence_5d, {"smi": smi_current})
+            weather_metadata = {"api_value": api_value, "smi_current": smi_current, "era5_quality": era5_bonus, "weather_quality": weather_quality}
+            background_tasks.add_task(
+                save_prediction_multi_species, lat, lon, datetime.now().date().isoformat(),
+                primary_species, secondary_species, response_payload["species_analysis"]["coexistence_probability"],
+                current_index, confidence_5d, weather_metadata
+            )
 
+        logger.info(f"Analysis completed: {primary_species} ({primary_probability:.2f}) - {coexistence_scenario} ({processing_time}ms)")
         return response_payload
 
     except Exception as e:
+        processing_time = round((time.time() - start_time) * 1000, 1)
         logger.exception(f"Error in multi-species analysis for ({lat:.5f}, {lon:.5f})")
         raise HTTPException(status_code=500, detail=str(e))
 
-
+# ===== ALTRI ENDPOINTS =====
 @app.get("/api/health")
 async def health():
     return {
-        "ok": True, "time": datetime.now(timezone.utc).isoformat(), "version": "3.4.0",
-        "model": "multi_window_detection_hydric_budget",
-        "features": ["multi_window_detection", "hydric_budget_closing_date", "stress_hazard_model"]
+        "ok": True, 
+        "time": datetime.now(timezone.utc).isoformat(), 
+        "version": "3.2.1",
+        "model": "multi_species_dynamic_duration",
+        "features": [
+            "multi_species_coexistence", "dynamic_fruiting_window", "era5_land_integration",
+            "species_specific_lags", "habitat_overlap_analysis", "scientific_documentation",
+            "fruiting_window_visualization"
+        ]
     }
 
 @app.get("/api/geocode")
@@ -1377,7 +2251,7 @@ async def report_sighting(lat: float, lon: float, species: str, secondary_specie
     try:
         conn = sqlite3.connect(DB_PATH)
         cursor = conn.cursor()
-        cursor.execute('''INSERT INTO sightings (lat, lon, date, species, secondary_species, quantity, size_cm_avg, confidence, notes, habitat_observed, model_version, geohash, coexistence_predicted) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''', (lat, lon, datetime.now().date().isoformat(), species, secondary_species or None, quantity, size_cm_avg, confidence, notes, habitat_observed, "3.4.0", geohash_encode_advanced(lat, lon), bool(secondary_species)))
+        cursor.execute('''INSERT INTO sightings (lat, lon, date, species, secondary_species, quantity, size_cm_avg, confidence, notes, habitat_observed, model_version, geohash, coexistence_predicted) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''', (lat, lon, datetime.now().date().isoformat(), species, secondary_species or None, quantity, size_cm_avg, confidence, notes, habitat_observed, "3.2.1", geohash_encode_advanced(lat, lon), bool(secondary_species)))
         conn.commit()
         conn.close()
         return {"status": "success", "message": "Segnalazione registrata", "id": cursor.lastrowid}
@@ -1388,7 +2262,7 @@ async def report_no_findings(lat: float, lon: float, searched_hours: float = 2.0
     try:
         conn = sqlite3.connect(DB_PATH)
         cursor = conn.cursor()
-        cursor.execute('''INSERT INTO no_sightings (lat, lon, date, searched_hours, search_method, habitat_searched, notes, search_thoroughness, geohash, model_version) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''', (lat, lon, datetime.now().date().isoformat(), searched_hours, search_method, habitat_searched, notes, search_thoroughness, geohash_encode_advanced(lat, lon), "3.4.0"))
+        cursor.execute('''INSERT INTO no_sightings (lat, lon, date, searched_hours, search_method, habitat_searched, notes, search_thoroughness, geohash, model_version) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''', (lat, lon, datetime.now().date().isoformat(), searched_hours, search_method, habitat_searched, notes, search_thoroughness, geohash_encode_advanced(lat, lon), "3.2.1"))
         conn.commit()
         conn.close()
         return {"status": "success", "message": "Report registrato", "id": cursor.lastrowid}
@@ -1413,11 +2287,11 @@ async def validation_stats_multi_species():
             "total_validations": (pos_stats[0] or 0) + neg_count, "coexistence_sightings": coexistence_sightings,
             "coexistence_pairs": coexistence_pairs, "avg_confidence": round(pos_stats[1] or 0, 2),
             "top_species_detailed": top_species, "ready_for_ml": ((pos_stats[0] or 0) + neg_count) >= 100,
-            "model_version": "3.4.0"
+            "model_version": "3.2.1"
         }
     except Exception as e: return {"error": str(e)}
 
 if __name__ == "__main__":
+    import os
     import uvicorn
     port = int(os.getenv("PORT", "8000"))
-    uvicorn.run("main:app", host="0.0.0.0", port=port, reload=True)
