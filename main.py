@@ -1535,185 +1535,165 @@ def build_analysis_multi_species_v30(payload: Dict[str, Any]) -> str:
             lag_range = profile.get("lag_range", (5, 14))
             lines.append(f"<li><em>B. {species}</em>: {lag_days} giorni (range normale: {lag_range[0]}-{lag_range[1]} giorni)</li>")
         lines.append("</ul>")
-        lines.append("<p><em>I lag sono calcolati considerando umidità suolo, shock termico, VPD stress e umidità cumulativa secondo letteratura scientifica</em></p>")
+        lines.append("<p><em>I lag sono calcolati considerando umidità suolo, shock termico, VPD stress e umidità cumulativa secondo letteratura scientifica</em></p>
+    # === FINESTRA DI FRUTTIFICAZIONE: TESTI DINAMICI (retrodatazione inclusa; no cambio modello) ===
+    try:
+        from datetime import datetime, timedelta
+        def it_date(date_obj):
+            mesi = ["gennaio","febbraio","marzo","aprile","maggio","giugno","luglio","agosto","settembre","ottobre","novembre","dicembre"]
+            return f"{date_obj.day} {mesi[date_obj.month-1]} {date_obj.year}"
+        # Base temporale locale (senza timezone)
+        today = datetime.utcnow().date()
+        # Dati utili
+        forecast = payload.get("forecast") or []
+        idx_today = int(payload.get("index", 0) or 0)
+        species_info = payload.get("species_analysis") or {}
+        species_forecasts = species_info.get("species_forecasts") or {}
+        species_probs = species_info.get("species_probabilities") or {}
+        primary_species = species_info.get("primary_species") or "reticulatus"
+        flush_events = payload.get("flush_events") or []
 
-        # === FINESTRE DI FRUTTIFICAZIONE: TESTI DINAMICI (placeholder, will be enhanced below) ===
-        
-        try:
-            # === Parametri di base e utilità ===
-            from datetime import datetime, timedelta
-            try:
-                from zoneinfo import ZoneInfo
-                tz = ZoneInfo("Europe/Rome")
-            except Exception:
-                tz = None
+        # Specie dominante oggi = serie con valore maggiore a t0
+        dominant = None; best0 = -1.0
+        for sp, arr in species_forecasts.items():
+            if isinstance(arr, list) and len(arr)>0 and arr[0] is not None and float(arr[0])>best0:
+                best0 = float(arr[0]); dominant = sp
+        if not dominant:
+            dominant = primary_species
 
-            def it_date(base_or_zero, offset):
-                mesi = ["gennaio","febbraio","marzo","aprile","maggio","giugno","luglio","agosto","settembre","ottobre","novembre","dicembre"]
-                base = datetime.now(tz) if tz else datetime.now()
-                day = (base + timedelta(days=int(offset))).date()
-                return f"{day.day} {mesi[day.month-1]} {day.year}"
+        lines.append("<h4>🪵 Finestra di Fruttificazione (dinamica)</h4>")
+        lines.append(f"<p><strong>Specie dominante oggi</strong>: <em>B. {dominant}</em>{(' (prob. '+str(round(species_probs.get(dominant,0.0),2))+')') if species_probs else ''}.</p>")
 
-            forecast = payload.get("forecast", []) or []
-            species_analysis = payload.get("species_analysis", {}) or {}
-            species_forecasts = species_analysis.get("species_forecasts") or {}
-            species_probs = species_analysis.get("species_probabilities") or {}
+        # Serie dominante
+        arr = species_forecasts.get(dominant, [])
+        t_peak = None; v_peak = None
+        t_open = None; t_close = None
+        truncated_close = False
 
-            # Specie dominante oggi
-            dominant = None; best0 = -1.0
-            for sp, arr in (species_forecasts or {}).items():
-                if isinstance(arr, list) and len(arr)>0 and (arr[0] is not None):
-                    v0 = float(arr[0])
-                    if v0 > best0:
-                        best0 = v0; dominant = sp
-            if not dominant:
-                dominant = species_analysis.get("primary_species") or "reticulatus"
-
-            # Cambio dominanza entro orizzonte
-            change_info = ""
-            try:
-                if species_forecasts:
-                    max_len = max(len(a) for a in species_forecasts.values())
-                    prev = None
-                    for d in range(max_len):
-                        best_sp, best_val = None, -1.0
-                        for sp, arr in species_forecasts.items():
-                            if d < len(arr) and arr[d] is not None and float(arr[d]) > best_val:
-                                best_sp, best_val = sp, float(arr[d])
-                        if d == 0:
-                            prev = best_sp
-                        elif best_sp and best_sp != prev:
-                            change_info = f"Dominanza prevista passare da <em>{prev}</em> a <em>{best_sp}</em> il {it_date(0, d)}."
-                            break
-            except Exception:
-                pass
-
-            lines.append("<h4>🪵 Finestra di Fruttificazione (dinamica)</h4>")
-            lines.append(f"<p><strong>Specie dominante oggi</strong>: <em>{dominant}</em>{' (prob. '+str(round(species_probs.get(dominant,0.0),2))+')' if species_probs else ''}.</p>")
-
-            arr = species_forecasts.get(dominant, []) if species_forecasts else []
-            t_peak = None; v_peak = None
-            t_open = None; t_close = None
-            truncated_close = False
-
-            if isinstance(arr, list) and arr:
-                # picco nell'orizzonte
-                v_peak = max(x for x in arr if x is not None) if any(x is not None for x in arr) else None
-                t_peak = (arr.index(v_peak) if v_peak in arr else None) if v_peak is not None else None
-
-                # soglie con isteresi relative/assolute
-                T_OPEN = 25.0
-                T_CLOSE = 18.0
-                if v_peak is None: v_peak = 0.0
-                thr_open = max(T_OPEN, 0.60 * v_peak)
-                thr_close = max(T_CLOSE, 0.50 * v_peak)
-
-                if t_peak is not None:
-                    # apertura: primo i <= t_peak con arr[i] >= thr_open
-                    for i in range(0, t_peak+1):
-                        vi = arr[i]
-                        if vi is not None and float(vi) >= thr_open:
-                            t_open = i; break
-                    # chiusura: ultimo i >= t_peak con arr[i] >= thr_close
-                    for j in range(len(arr)-1, t_peak-1, -1):
-                        vj = arr[j]
-                        if vj is not None and float(vj) >= thr_close:
-                            t_close = j; break
-
-                    # stime se troncato a destra
-                    if t_close is None:
-                        span_left = t_peak - (t_open if t_open is not None else t_peak)
-                        t_close = t_peak + max(2, span_left)
-                        truncated_close = True
-
-                # Messaggi con date
-                if t_open is not None and t_peak is not None and t_close is not None:
-                    parts = []
-                    parts.append(f"<strong>Apertura</strong>: {'oggi' if t_open==0 else it_date(0, t_open)}{'' if t_open==0 else f' (≈ tra {t_open} giorni)'}")
-                    parts.append(f"<strong>Picco</strong>: {it_date(0, t_peak)}")
-                    if truncated_close or t_close > 9:
-                        parts.append(f"<strong>Chiusura</strong>: ≈ {it_date(0, t_close)} <em>(oltre l&#39;orizzonte di 10 giorni)</em>")
-                    else:
-                        durata = max(0, t_close - max(0, t_open))
-                        parts.append(f"<strong>Chiusura</strong>: {it_date(0, t_close)} (≈ {durata} giorni di finestra)")
-                    lines.append("<p>" + ". ".join(parts) + ".</p>")
-                else:
-                    lines.append("<p><strong>Nessuna finestra ben definita</strong> nei prossimi giorni; attendere precipitazioni efficaci e condizioni favorevoli.</p>")
-
-                # Situazione oggi + cambio dominanza
-                slope_dom = 0.0
-                if len(arr) >= 2 and arr[0] is not None and arr[1] is not None:
-                    slope_dom = float(arr[1]) - float(arr[0])
-
-                fase = "fuori finestra"
-                if t_open is not None and t_close is not None:
-                    if t_open <= 0 <= t_close:
-                        if t_peak is not None and 0 < t_peak:
-                            rel = (0 - t_open) / max(1.0, (t_close - t_open))
-                        else:
-                            rel = 0.0
-                        if rel < 1/3 and slope_dom >= 0:
-                            fase = "fase iniziale (in apertura)"
-                        elif rel < 2/3 and abs(slope_dom) < 1.0:
-                            fase = "pieno della finestra"
-                        else:
-                            fase = "fase finale (in chiusura)"
-                    elif 0 < t_open:
-                        fase = "pre-finestra (rampa)"
-
-                if change_info:
-                    lines.append(f"<p><strong>Situazione oggi</strong>: {fase}. {change_info}</p>")
-                else:
-                    lines.append(f"<p><strong>Situazione oggi</strong>: {fase}.</p>")
-
-                # Consigli adattivi (riassunti)
-                tmean7 = float(payload.get("Tmean7_c") or 0.0)
-                rh7    = float(payload.get("RH7_pct") or 0.0)
-                vpd    = float(payload.get("vpd_current_hpa") or 0.0)
-                smi    = float(payload.get("smi_current") or 0.0)
-                cum_mo = float(payload.get("cumulative_moisture_index") or 0.0)
-                aspect_oct = (payload.get("aspect_octant") or "")
-                elev_m = float(payload.get("elevation_m") or 0.0)
-                habitat_used = (payload.get("habitat_used") or "")
-
-                tips = []
-                if fase.startswith("pre-"):
-                    if smi > 0.65 or cum_mo > 25.0:
-                        tips.append("Suolo molto umido: evita ristagni; preferisci dossi drenati finché non drena.")
-                    if vpd < 6.0 and rh7 > 85:
-                        tips.append("Aria umida e stabile: apertura attesa entro 24–48 h dal termine delle piogge.")
-                elif "iniziale" in fase:
-                    tips.append("Fase iniziale: cerca primordi presso radici affioranti e lettiera aerata; ritorna dopo 24–36 h.")
-                elif "pieno" in fase:
-                    tips.append("Pieno: amplia il raggio; con indice >60, attesi più ritrovamenti/ora.")
-                elif "finale" in fase:
-                    tips.append("Finale: ombra o 100–200 m più in alto; cappelli più grandi ma radi.")
-
-                if vpd > 12.0:
-                    tips.append("VPD alto: privilegia versanti N–NE, impluvi e sottobosco fitto; esci al mattino presto.")
-                if 15.0 <= tmean7 <= 22.0:
-                    tips.append("TM7 ottimale (15–22 °C) per il complesso estivo–autunnale.")
-                elif tmean7 > 24.0:
-                    tips.append("Caldo elevato: finestra più corta; controlli più frequenti.")
-                if aspect_oct in {"S","SE","SW"} and tmean7 > 20.0:
-                    tips.append("Esposizioni calde: anticipi ma maturazione rapida; verifica ogni 24–36 h.")
-                if dominant in {"edulis","pinophilus"} and elev_m < 900:
-                    tips.append("Specie montane: sali di quota o spostati verso faggete/conifere.")
-                if dominant in {"aereus","reticulatus"} and (habitat_used and "querc" in habitat_used.lower()):
-                    tips.append("Querceti: margini luminosi e interfacce prato–bosco dopo temporali caldi sono produttivi.")
-
-                if tips:
-                    lines.append("<ul style='margin:8px 0 0 20px'>")
-                    for t in tips[:6]:
-                        lines.append(f"<li>{t}</li>")
-                    lines.append("</ul>")
+        if isinstance(arr, list) and arr:
+            v_vals = [float(x) for x in arr if x is not None]
+            if v_vals:
+                v_peak = max(v_vals)
+                t_peak = arr.index(max(arr)) if v_peak in arr else None
             else:
-                lines.append("<p><strong>Nessuna finestra attiva</strong> nei prossimi 10 giorni secondo la soglia operativa; attendere piogge efficaci e calo del VPD.</p>")
+                v_peak = 0.0
 
-        except Exception:
-            # Fail-safe
-            pass
+            # Soglie operative relative/assolute
+            T_OPEN = 25.0; T_CLOSE = 18.0
+            thr_open = max(T_OPEN, 0.60 * v_peak if v_peak is not None else T_OPEN)
+            thr_close = max(T_CLOSE, 0.50 * v_peak if v_peak is not None else T_CLOSE)
 
+            if t_peak is not None:
+                # apertura: primo i <= t_peak con arr[i] >= thr_open
+                for i in range(0, t_peak+1):
+                    vi = arr[i]
+                    if vi is not None and float(vi) >= thr_open:
+                        t_open = i; break
+                # chiusura: ultimo i >= t_peak con arr[i] >= thr_close
+                for j in range(len(arr)-1, t_peak-1, -1):
+                    vj = arr[j]
+                    if vj is not None and float(vj) >= thr_close:
+                        t_close = j; break
+                if t_close is None:
+                    span_left = t_peak - (t_open if t_open is not None else t_peak)
+                    t_close = t_peak + max(2, span_left)
+                    truncated_close = True
+
+            # --- Retrodatazione dell'apertura quando già iniziata prima di oggi ---
+            # Stimiamo t_open_reale usando: (A) flush + 0.8*lag della specie dominante; (B) fallback di segnale.
+            t_open_real_date = None
+            # (A) Biologica: ultimo flush osservato per la specie primaria (il backend salva solo primary)
+            last_obs_event = None
+            for ev in flush_events:
+                if ev.get("observed"):
+                    if (not last_obs_event) or (ev.get("event_day_index", -10**9) > last_obs_event.get("event_day_index", -10**9)):
+                        last_obs_event = ev
+            try:
+                if last_obs_event:
+                    # Data evento
+                    when_str = str(last_obs_event.get("event_when",""))
+                    # atteso formato 'YYYY-MM-DD'
+                    ev_date = datetime.fromisoformat(when_str).date() if "-" in when_str else None
+                    # lag dinamico
+                    ev_lag = int(last_obs_event.get("lag_days") or 0)
+                    # apertura biologica a ~80% del lag
+                    m_open = 0.8
+                    if ev_date and ev_lag>0:
+                        t_open_real_date = ev_date + timedelta(days=int(round(m_open*ev_lag)))
+            except Exception:
+                t_open_real_date = None
+
+            # (B) Fallback di segnale, se non disponibile o non plausibile
+            if t_open_real_date is None:
+                # se oggi siamo sopra soglia e in calo, deduciamo apertura 1–3 giorni fa
+                slope = 0.0
+                if len(arr)>=2 and arr[0] is not None and arr[1] is not None:
+                    slope = float(arr[1]) - float(arr[0])
+                if arr and arr[0] is not None and float(arr[0])>=thr_open and slope<0:
+                    # stima conservativa
+                    denom = abs(slope) if abs(slope)>1e-3 else 1.0
+                    delta = int(round(min(3.0, max(1.0, (float(arr[0])-thr_open)/denom))))
+                    t_open_real_date = today - timedelta(days=delta)
+
+            # Messaggi con date (preferiamo t_open_reale se < oggi)
+            parts = []
+            if t_open_real_date and t_open is not None and t_open==0 and t_open_real_date < today:
+                days_ago = (today - t_open_real_date).days
+                parts.append(f"<strong>Apertura</strong>: già iniziata il {it_date(t_open_real_date)} (≈ {days_ago} giorni fa)")
+            elif t_open is not None:
+                d = today + timedelta(days=int(t_open))
+                if t_open==0:
+                    parts.append(f"<strong>Apertura</strong>: oggi ({it_date(d)})")
+                else:
+                    parts.append(f"<strong>Apertura</strong>: {it_date(d)} (≈ tra {t_open} giorni)")
+            elif t_open_real_date:
+                if t_open_real_date <= today:
+                    days_ago = (today - t_open_real_date).days
+                    parts.append(f"<strong>Apertura</strong>: già iniziata il {it_date(t_open_real_date)} (≈ {days_ago} giorni fa)")
+                else:
+                    days_to = (t_open_real_date - today).days
+                    parts.append(f"<strong>Apertura</strong>: {it_date(t_open_real_date)} (≈ tra {days_to} giorni)")
+            # Picco
+            if t_peak is not None:
+                parts.append(f"<strong>Picco</strong>: {it_date(today + timedelta(days=int(t_peak)))}")
+            # Chiusura
+            if t_close is not None:
+                d_close = today + timedelta(days=int(t_close))
+                if truncated_close or t_close>9:
+                    parts.append(f"<strong>Chiusura</strong>: ≈ {it_date(d_close)} <em>(oltre l&#39;orizzonte di 10 giorni)</em>")
+                else:
+                    durata = max(0, int(t_close) - max(0, int(t_open or 0)))
+                    parts.append(f"<strong>Chiusura</strong>: {it_date(d_close)} (≈ {durata} giorni di finestra)")
+            if parts:
+                lines.append("<p>" + ". ".join(parts) + ".</p>")
+
+            # Situazione oggi (fase) – con regola del picco
+            fase = "fuori finestra"
+            if t_open is not None and t_close is not None and (t_open <= 0 <= t_close):
+                if v_peak and arr[0] is not None and float(arr[0]) >= 0.9*float(v_peak):
+                    fase = "pieno (picco oggi)"
+                else:
+                    # posizione relativa
+                    rel = (0 - (t_open or 0)) / max(1.0, (t_close - (t_open or 0)))
+                    slope = 0.0
+                    if len(arr)>=2 and arr[0] is not None and arr[1] is not None:
+                        slope = float(arr[1]) - float(arr[0])
+                    if rel < 1/3 and slope >= 0:
+                        fase = "fase iniziale (in apertura)"
+                    elif rel < 2/3 and abs(slope) < 1.0:
+                        fase = "pieno (plateau)"
+                    else:
+                        fase = "fase finale (in chiusura)"
+            elif (t_open is None or t_open>0):
+                fase = "pre-finestra (rampa)"
+
+            lines.append(f"<p><strong>Situazione oggi</strong>: {fase}.</p>")
+
+    except Exception as e:
+        # Fail-safe: il rendering non deve fallire
+        lines.append("<p class='muted'>[Nota: impossibile calcolare i dettagli dinamici della finestra in questa istanza]</p>")
+    # === FINE BLOCCO DINAMICO ===
+")
     
     # Note finali scientifiche
     lines.append("<h4>📚 Base Scientifica</h4>")
