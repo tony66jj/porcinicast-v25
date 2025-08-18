@@ -1608,7 +1608,6 @@ def build_analysis_multi_species_v30(payload: Dict[str, Any]) -> str:
                     if arr and arr[0] is not None and float(arr[0])>=thr_open and slope<0:
                         denom = abs(slope) if abs(slope)>1e-3 else 1.0
                         delta = int(round(min(3.0, max(1.0, (float(arr[0])-thr_open)/denom))))
-                        from datetime import date as _d
                         t_open_real_date = today - timedelta(days=delta)
                 parts = []
                 if t_open_real_date and t_open is not None and t_open==0 and t_open_real_date < today:
@@ -1659,7 +1658,6 @@ def build_analysis_multi_species_v30(payload: Dict[str, Any]) -> str:
         except Exception:
             lines.append("<p class='muted'>[Nota: impossibile calcolare i dettagli dinamici della finestra in questa istanza]</p>")
         # === FINE BLOCCO DINAMICO ===
-
     
     # Note finali scientifiche
     lines.append("<h4>📚 Base Scientifica</h4>")
@@ -2185,4 +2183,3 @@ if __name__ == "__main__":
     import os
     import uvicorn
     port = int(os.getenv("PORT", "8000"))
-    uvicorn.run(app, host="0.0.0.0", port=port)
