@@ -84,9 +84,9 @@ def blend_to_neutral(value: float, neutral: float = 1.0, weight: float = 0.35) -
         return value
 
 app = FastAPI(
-    title="BoletusLab® v3.2.0 - Finestra di Fruttificazione Dinamica",
-    version="3.2.0",
-    description="Sistema multi-specie con durata della buttata variabile in base a specie, temperatura e VPD."
+    title="BoletusLab® v3.2.1 - Finestra di Fruttificazione Dinamica",
+    version="3.2.1",
+    description="Sistema multi-specie con durata della buttata variabile in base a specie, temperatura e VPD e visualizzazione finestra completa."
 )
 
 app.add_middleware(
@@ -97,7 +97,7 @@ app.add_middleware(
     allow_credentials=True
 )
 
-HEADERS = {"User-Agent":"BoletusLab/3.2.0 (+scientific)", "Accept-Language":"it"}
+HEADERS = {"User-Agent":"BoletusLab/3.2.1 (+scientific)", "Accept-Language":"it"}
 CDS_API_URL = os.environ.get("CDS_API_URL", "https://cds.climate.copernicus.eu/api")
 CDS_API_KEY = os.environ.get("CDS_API_KEY", "")
 
@@ -130,7 +130,7 @@ def init_database():
                 notes TEXT,
                 habitat_observed TEXT,
                 predicted_score INTEGER,
-                model_version TEXT DEFAULT '3.2.0',
+                model_version TEXT DEFAULT '3.2.1',
                 coexistence_predicted BOOLEAN DEFAULT FALSE,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 geohash TEXT
@@ -148,7 +148,7 @@ def init_database():
                 habitat_searched TEXT,
                 notes TEXT,
                 predicted_score INTEGER,
-                model_version TEXT DEFAULT '3.2.0',
+                model_version TEXT DEFAULT '3.2.1',
                 search_thoroughness INTEGER DEFAULT 3,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 geohash TEXT
@@ -168,7 +168,7 @@ def init_database():
                 habitat TEXT,
                 confidence_data TEXT,
                 weather_data TEXT,
-                model_version TEXT DEFAULT '3.2.0',
+                model_version TEXT DEFAULT '3.2.1',
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 geohash TEXT
             )
@@ -1339,7 +1339,7 @@ def save_prediction_multi_species(lat: float, lon: float, date: str,
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ''', (lat, lon, date, primary_score, primary_species, secondary_species,
               coexistence_prob, json.dumps(confidence_data), json.dumps(weather_data),
-              "3.2.0", geohash))
+              "3.2.1", geohash))
         
         conn.commit()
         conn.close()
@@ -1412,7 +1412,7 @@ def build_analysis_multi_species_v30(payload: Dict[str, Any]) -> str:
     lines = []
     
     # Header
-    lines.append("<h4>🧬 Analisi Biologica Multi-Specie v3.2.0</h4>")
+    lines.append("<h4>🧬 Analisi Biologica Multi-Specie v3.2.1</h4>")
     lines.append("<p><em>Sistema a curve multiple con durata della buttata variabile in base a specie, temperatura e VPD.</em></p>")
     
     # Sistema meteorologico avanzato
@@ -1565,7 +1565,7 @@ async def api_score_multi_species(
     background_tasks: BackgroundTasks = None
 ):
     """
-    🚀 ENDPOINT MULTI-SPECIE v3.2.0
+    🚀 ENDPOINT MULTI-SPECIE v3.2.1
     Sistema a curve multiple con durata della buttata variabile
     """
     start_time = time.time()
@@ -1845,6 +1845,20 @@ async def api_score_multi_species(
         
         current_index = forecast_final[0] if forecast_final else 0
         
+        # ===== NUOVA LOGICA: CALCOLO FINESTRA DI FRUTTIFICAZIONE COMPLETA =====
+        fruiting_window_start = -1
+        fruiting_window_end = -1
+        threshold = 15  # Soglia per considerare una finestra "attiva"
+        if any(v > threshold for v in forecast_final):
+            try:
+                fruiting_window_start = next(i for i, v in enumerate(forecast_final) if v > threshold)
+                fruiting_window_end = len(forecast_final) - 1 - next(i for i, v in enumerate(reversed(forecast_final)) if v > threshold)
+            except StopIteration:
+                # Fallback nel caso la logica fallisca
+                fruiting_window_start = -1
+                fruiting_window_end = -1
+        # ===== FINE NUOVA LOGICA =====
+
         has_validations, validation_count, validation_accuracy = check_recent_validations_super_advanced(lat, lon)
         
         coexistence_stability = 1.0 - (len(species_probabilities) - 1) * 0.1
@@ -1914,7 +1928,11 @@ async def api_score_multi_species(
             "API_star_mm": round(api_value, 1), "P7_mm": round(sum(P_past[-7:]), 1), "P20_mm": round(sum(P_past), 1),
             "Tmean7_c": round(tmean_7d, 1), "RH7_pct": round(rh_7d, 1), "thermal_shock_index": round(thermal_shock, 2),
             "smi_current": round(smi_current, 2), "vpd_current_hpa": round(vpd_current, 1), "cumulative_moisture_index": round(cumulative_moisture_current, 1),
-            "index": current_index, "forecast": forecast_final, "best_window": best_window, "confidence_detailed": confidence_5d,
+            "index": current_index, "forecast": forecast_final, 
+            "best_window": best_window,
+            "fruiting_window_start": fruiting_window_start, # NUOVO DATO
+            "fruiting_window_end": fruiting_window_end,     # NUOVO DATO
+            "confidence_detailed": confidence_5d,
             "species_analysis": {
                 "primary_species": primary_species, "secondary_species": secondary_species,
                 "species_probabilities": {k: round(v, 3) for k, v in species_probabilities.items()},
@@ -1927,7 +1945,7 @@ async def api_score_multi_species(
             "flush_events": flush_events_details, "total_events_detected": len(rain_events),
             "weather_past": weather_past_table, "weather_future": weather_future_table,
             "has_local_validations": has_validations, "validation_count": validation_count,
-            "model_version": "3.2.0", "model_type": "multi_species_dynamic_duration",
+            "model_version": "3.2.1", "model_type": "multi_species_dynamic_duration",
             "processing_time_ms": processing_time, "timestamp": datetime.now(timezone.utc).isoformat(),
             "weather_sources": weather_sources, "weather_quality_score": round(weather_quality, 3), "era5_enabled": bool(use_era5),
             "diagnostics": {
@@ -1961,11 +1979,12 @@ async def health():
     return {
         "ok": True, 
         "time": datetime.now(timezone.utc).isoformat(), 
-        "version": "3.2.0",
+        "version": "3.2.1",
         "model": "multi_species_dynamic_duration",
         "features": [
             "multi_species_coexistence", "dynamic_fruiting_window", "era5_land_integration",
-            "species_specific_lags", "habitat_overlap_analysis", "scientific_documentation"
+            "species_specific_lags", "habitat_overlap_analysis", "scientific_documentation",
+            "fruiting_window_visualization"
         ]
     }
 
@@ -1998,7 +2017,7 @@ async def report_sighting(lat: float, lon: float, species: str, secondary_specie
     try:
         conn = sqlite3.connect(DB_PATH)
         cursor = conn.cursor()
-        cursor.execute('''INSERT INTO sightings (lat, lon, date, species, secondary_species, quantity, size_cm_avg, confidence, notes, habitat_observed, model_version, geohash, coexistence_predicted) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''', (lat, lon, datetime.now().date().isoformat(), species, secondary_species or None, quantity, size_cm_avg, confidence, notes, habitat_observed, "3.2.0", geohash_encode_advanced(lat, lon), bool(secondary_species)))
+        cursor.execute('''INSERT INTO sightings (lat, lon, date, species, secondary_species, quantity, size_cm_avg, confidence, notes, habitat_observed, model_version, geohash, coexistence_predicted) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''', (lat, lon, datetime.now().date().isoformat(), species, secondary_species or None, quantity, size_cm_avg, confidence, notes, habitat_observed, "3.2.1", geohash_encode_advanced(lat, lon), bool(secondary_species)))
         conn.commit()
         conn.close()
         return {"status": "success", "message": "Segnalazione registrata", "id": cursor.lastrowid}
@@ -2009,7 +2028,7 @@ async def report_no_findings(lat: float, lon: float, searched_hours: float = 2.0
     try:
         conn = sqlite3.connect(DB_PATH)
         cursor = conn.cursor()
-        cursor.execute('''INSERT INTO no_sightings (lat, lon, date, searched_hours, search_method, habitat_searched, notes, search_thoroughness, geohash, model_version) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''', (lat, lon, datetime.now().date().isoformat(), searched_hours, search_method, habitat_searched, notes, search_thoroughness, geohash_encode_advanced(lat, lon), "3.2.0"))
+        cursor.execute('''INSERT INTO no_sightings (lat, lon, date, searched_hours, search_method, habitat_searched, notes, search_thoroughness, geohash, model_version) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''', (lat, lon, datetime.now().date().isoformat(), searched_hours, search_method, habitat_searched, notes, search_thoroughness, geohash_encode_advanced(lat, lon), "3.2.1"))
         conn.commit()
         conn.close()
         return {"status": "success", "message": "Report registrato", "id": cursor.lastrowid}
@@ -2034,7 +2053,7 @@ async def validation_stats_multi_species():
             "total_validations": (pos_stats[0] or 0) + neg_count, "coexistence_sightings": coexistence_sightings,
             "coexistence_pairs": coexistence_pairs, "avg_confidence": round(pos_stats[1] or 0, 2),
             "top_species_detailed": top_species, "ready_for_ml": ((pos_stats[0] or 0) + neg_count) >= 100,
-            "model_version": "3.2.0"
+            "model_version": "3.2.1"
         }
     except Exception as e: return {"error": str(e)}
 
