@@ -920,12 +920,20 @@ const labels = forecast.map((_, i) => {
         const datasets = [];
         const speciesInfo = data?.species_analysis || {};
 
-        // ===== NUOVA LOGICA per EVIDENZIARE la FINESTRA DI FRUTTIFICAZIONE =====
-        if (data && data.fruiting_window_start > -1 && data.fruiting_window_end > -1) {
-          const backgroundData = new Array(forecast.length).fill(null);
+        // ===== NUOVA LOGICA per EVIDENZIARE la/le FINESTRA/E DI FRUTTIFICAZIONE =====
+        const backgroundData = new Array(forecast.length).fill(null);
+        if (data && Array.isArray(data.fruiting_windows) && data.fruiting_windows.length > 0) {
+          data.fruiting_windows.forEach(w => {
+            for (let i = w.start; i <= w.end && i < backgroundData.length; i++) {
+              backgroundData[i] = 100; // Altezza massima del grafico
+            }
+          });
+        } else if (data && data.fruiting_window_start > -1 && data.fruiting_window_end > -1) {
           for (let i = data.fruiting_window_start; i <= data.fruiting_window_end; i++) {
             backgroundData[i] = 100; // Altezza massima del grafico
           }
+        }
+        if (backgroundData.some(v => v !== null)) {
           datasets.push({
             type: 'bar',
             label: 'Finestra di Fruttificazione',
@@ -945,7 +953,7 @@ const labels = forecast.map((_, i) => {
           const lagExplanation = document.getElementById('lag-explanation');
           if (lagExplanation) lagExplanation.style.display = 'block';
         } else {
-            document.getElementById('lag-explanation').style.display = 'none';
+          document.getElementById('lag-explanation').style.display = 'none';
         }
         // ===== FINE NUOVA LOGICA =====
 
