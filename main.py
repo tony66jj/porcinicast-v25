@@ -1364,6 +1364,97 @@ def gaussian_kernel_advanced(x: float, mu: float, sigma: float, skewness: float 
     return base_gauss
 
 # ===== DATABASE UTILS MULTI-SPECIE =====
+
+# ====== BHC: Beyond-Horizon Closure estimation ======
+def _date_from_today_offset(offset_days: int) -> datetime:
+    """Today (UTC) + offset_days (offset 0 -> today). In this app: forecast[0] ~ today+1."""
+    return datetime.now(timezone.utc).date() + timedelta(days=offset_days)
+
+def extend_forecast_bhc(
+    flush_events_details: List[Dict[str, Any]],
+    species_probabilities: Dict[str, float],
+    past_days: int,
+    future_days: int,
+    elev_m: float,
+    extra_days: int = 120
+) -> List[float]:
+    """
+    Deterministically extend forecast beyond 'future_days' by reusing the same
+    species/event kernels and phenology already used by the model.
+    Returns a tail of length extra_days in [0,100].
+    """
+    tail = [0.0] * extra_days
+    if not flush_events_details or not species_probabilities:
+        return tail
+    try:
+        for day_idx in range(future_days, future_days + extra_days):
+            abs_idx = past_days + day_idx
+            this_date = datetime.now(timezone.utc).date() + timedelta(days=day_idx+1)
+            doy = this_date.timetuple().tm_yday
+            acc = 0.0
+            for ev in flush_events_details:
+                sp = ev.get("species", "reticulatus")
+                amp = float(ev.get("final_amplitude", 0.0))
+                mu  = float(ev.get("peak_idx", past_days + future_days + 5))
+                sg  = float(ev.get("sigma", 2.0))
+                skew = float(ev.get("skew", 0.0))
+                prob = float(species_probabilities.get(sp, 0.0))
+                if prob <= 0.0 or amp <= 0.0:
+                    continue
+                kern = gaussian_kernel_advanced(abs_idx, mu, sg, skewness=skew)
+                w_phen = phenology_weight(sp, doy, elev_m)
+                acc += 100.0 * amp * kern * w_phen * prob
+            tail[day_idx - future_days] = clamp(acc, 0.0, 100.0)
+        try:
+            sm = savitzky_golay_advanced(tail, window_length=5, polyorder=2)
+            return [float(round(x, 2)) for x in sm]
+        except Exception:
+            return tail
+    except Exception:
+        return tail
+
+def compute_extended_closure_index(
+    forecast10: List[float],
+    flush_events_details: List[Dict[str, Any]],
+    species_probabilities: Dict[str, float],
+    past_days: int,
+    future_days: int,
+    elev_m: float,
+    base_threshold: float = 15.0,
+    extra_days: int = 120
+) -> Tuple[int, List[float]]:
+    """
+    Return (end_index_extended, full_extended_forecast). The 'end' is the closure index
+    of the **same** window detected within the 10-day horizon, but computed on the
+    extended forecast. If the window already closes within horizon, the original end is returned.
+    """
+    windows10 = detect_fruiting_windows(forecast10, base_threshold=base_threshold)
+    if not windows10:
+        return (-1, forecast10[:])
+    first_w = windows10[0]
+    horizon_end = future_days - 1
+    if first_w.get("end", -1) < horizon_end:
+        return (int(first_w["end"]), forecast10[:])
+
+    tail = extend_forecast_bhc(
+        flush_events_details, species_probabilities, past_days, future_days, elev_m, extra_days=extra_days
+    )
+    full = list(forecast10) + list(tail)
+    win_ext = detect_fruiting_windows(full, base_threshold=base_threshold)
+
+    match = None
+    for w in win_ext:
+        if int(w.get("start", -999)) == int(first_w.get("start", -998)):
+            match = w; break
+    if not match:
+        for w in win_ext:
+            if w.get("start", 10**9) <= first_w.get("end", -1) and w.get("end", -1) >= first_w.get("start", 10**9):
+                match = w; break
+    if not match:
+        return (int(first_w["end"]), full)
+    return (int(match.get("end", first_w["end"])), full)
+# ====== END BHC ======
+
 def save_prediction_multi_species(lat: float, lon: float, date: str, 
                                  primary_species: str, secondary_species: str,
                                  coexistence_prob: float, primary_score: int,
@@ -1692,6 +1783,17 @@ def build_analysis_multi_species_v30(payload: Dict[str, Any]) -> str:
     lines.append("<li>Studi di sovrapposizione ecologica in ecosistemi mediterranei e temperati</li>")
     lines.append("</ul>")
     
+    
+    # === BHC — Chiusura deterministica oltre l'orizzonte ===
+    try:
+        ext_date = payload.get("fruiting_window_end_extended_date")
+        if ext_date:
+            d = datetime.fromisoformat(ext_date).date()
+            mesi = ['gennaio','febbraio','marzo','aprile','maggio','giugno','luglio','agosto','settembre','ottobre','novembre','dicembre']
+            lines.append("<h4>🧮 Estensione deterministica (BHC)</h4>")
+            lines.append(f"<p><strong>Chiusura prevista:</strong> {d.day} {mesi[d.month-1]} {d.year}</p>")
+    except Exception:
+        pass
     return "\n".join(lines)
 
 # ===== ENDPOINT PRINCIPALE MULTI-SPECIE =====
@@ -1968,7 +2070,7 @@ async def api_score_multi_species(
                         "event_strength": round(event_strength, 2), "lag_days": lag_days, "species": species,
                         "observed": event_idx < past_days,
                         "final_sigma": round(sigma, 2) # Aggiungiamo per debug
-                    })
+                    , "final_amplitude": round(final_amplitude, 4), "peak_idx": int(peak_idx), "sigma": float(sigma), "skew": float(skew) })
 
             species_forecast_clamped = [clamp(v, 0.0, 100.0) for v in species_forecast]
             species_forecast_smoothed = savitzky_golay_advanced(species_forecast_clamped, window_length=win_len)
@@ -1997,6 +2099,17 @@ async def api_score_multi_species(
         fruiting_windows = [w for w in fruiting_windows if (w['start'] > 0) or (w['start'] <= 0 <= w['end'] and today_val_fw > base_thr_fw)]
         fruiting_window_start = fruiting_windows[0]["start"] if fruiting_windows else -1
         fruiting_window_end = fruiting_windows[0]["end"] if fruiting_windows else -1
+        # === BHC extension: closure possibly beyond horizon ===
+        try:
+            extended_end_idx, extended_full = compute_extended_closure_index(
+                forecast_final, flush_events_details, species_probabilities,
+                past_days, future_days, elev_m, base_threshold=base_thr_fw, extra_days=120
+            )
+            base_date = datetime.now(timezone.utc).date()
+            extended_end_date = (base_date + timedelta(days=extended_end_idx + 1)).isoformat() if extended_end_idx >= 0 else None
+        except Exception:
+            extended_end_idx, extended_end_date, extended_full = -1, None, forecast_final[:]
+    
 
         has_validations, validation_count, validation_accuracy = check_recent_validations_super_advanced(lat, lon)
         
@@ -2094,6 +2207,19 @@ async def api_score_multi_species(
                 "scientific_improvements": { "dynamic_fruiting_window": True }
             }
         }
+        
+        
+        # Attach BHC deterministic closure info to payload
+        try:
+            if extended_end_idx is not None and extended_end_idx >= 0:
+                response_payload["fruiting_window_end_extended_idx"] = int(extended_end_idx)
+                response_payload["fruiting_window_end_extended_date"] = extended_end_date
+            else:
+                response_payload["fruiting_window_end_extended_idx"] = int(fruiting_window_end) if isinstance(fruiting_window_end, int) else -1
+                response_payload["fruiting_window_end_extended_date"] = (datetime.now(timezone.utc).date() + timedelta(days=(int(fruiting_window_end)+1 if isinstance(fruiting_window_end, int) and fruiting_window_end>=0 else 0))).isoformat() if isinstance(fruiting_window_end, int) and fruiting_window_end >= 0 else None
+        except Exception:
+            response_payload["fruiting_window_end_extended_idx"] = -1
+            response_payload["fruiting_window_end_extended_date"] = None
         
         response_payload["dynamic_explanation"] = build_analysis_multi_species_v30(response_payload)
         
@@ -2200,4 +2326,3 @@ async def validation_stats_multi_species():
 if __name__ == "__main__":
     import os
     import uvicorn
-    port = int(os.getenv("PORT", "8000"))
