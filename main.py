@@ -1455,6 +1455,131 @@ def compute_extended_closure_index(
     return (int(match.get("end", first_w["end"])), full)
 # ====== END BHC ======
 
+
+# ====== BHC v2: thermal-aware extension and per-window targeting ======
+def _triangular_weight(x: float, a: float, b: float, c: float) -> float:
+    "Triangular membership: 0 at a,c; 1 at [b1..b2] (if b tuple) or peak at b."
+    try:
+        if isinstance(b, (list, tuple)) and len(b) == 2:
+            b1, b2 = float(b[0]), float(b[1])
+            if x <= a or x >= c: return 0.0
+            if x < b1: return (x - a) / (b1 - a) if (b1 - a) > 0 else 0.0
+            if x <= b2: return 1.0
+            return (c - x) / (c - b2) if (c - b2) > 0 else 0.0
+        else:
+            b = float(b)
+            if x <= a or x >= c: return 0.0
+            if x <= b: return (x - a) / (b - a) if (b - a) > 0 else 0.0
+            return (c - x) / (c - b) if (c - b) > 0 else 0.0
+    except Exception:
+        return 1.0
+
+def _thermal_weight_for_species(species: str, tmean_c: float) -> float:
+    prof = SPECIES_PROFILES_V30.get(species, {})
+    t_opt = prof.get("tm7_opt", (14.0, 20.0))
+    t_crit = prof.get("tm7_critical", (8.0, 26.0))
+    return clamp(_triangular_weight(tmean_c, float(t_crit[0]), t_opt, float(t_crit[1])), 0.0, 1.2)
+
+def extend_forecast_bhc_v2(
+    flush_events_details: List[Dict[str, Any]],
+    species_probabilities: Dict[str, float],
+    past_days: int,
+    future_days: int,
+    elev_m: float,
+    tmean_series: Optional[List[float]] = None,
+    extra_days: int = 120
+) -> List[float]:
+    """
+    Deterministic extension using species kernels + phenology + **thermal suitability** from forecast Tmean.
+    tmean_series must be the continuous series (past+future) aligned to indices used by forecast.
+    """
+    tail = [0.0] * extra_days
+    if not flush_events_details or not species_probabilities:
+        return tail
+    try:
+        last_known_t = tmean_series[past_days + future_days - 1] if (tmean_series and len(tmean_series) > past_days + future_days - 1) else 12.0
+        for day_idx in range(future_days, future_days + extra_days):
+            abs_idx = past_days + day_idx
+            this_date = datetime.now(timezone.utc).date() + timedelta(days=day_idx+1)
+            doy = this_date.timetuple().tm_yday
+            # thermal from forecast or persistence
+            tmean_c = tmean_series[abs_idx] if (tmean_series and abs_idx < len(tmean_series)) else last_known_t
+            # simple cooling/warming shock on 48h gradient
+            if tmean_series and abs_idx-2 >= 0:
+                delta2 = tmean_series[abs_idx] - tmean_series[abs_idx-2]
+            else:
+                delta2 = 0.0
+            shock = 1.0
+            if delta2 <= -2.0: shock = 1.0 + min(0.12, 0.03 * (-delta2))   # cooling boost up to +12%
+            elif delta2 >= 2.0: shock = 1.0 - min(0.10, 0.02 * (delta2))   # warming penalty up to -10%
+
+            acc = 0.0
+            for ev in flush_events_details:
+                sp = ev.get("species", "reticulatus")
+                amp = float(ev.get("final_amplitude", 0.0))
+                mu  = float(ev.get("peak_idx", past_days + future_days + 5))
+                sg  = float(ev.get("sigma", 2.0))
+                skew = float(ev.get("skew", 0.0))
+                prob = float(species_probabilities.get(sp, 0.0))
+                if prob <= 0.0 or amp <= 0.0:
+                    continue
+                kern = gaussian_kernel_advanced(abs_idx, mu, sg, skewness=skew)
+                w_phen = phenology_weight(sp, doy, elev_m)
+                w_therm = _thermal_weight_for_species(sp, tmean_c)
+                acc += 100.0 * amp * kern * w_phen * w_therm * shock * prob
+            tail[day_idx - future_days] = clamp(acc, 0.0, 100.0)
+        try:
+            sm = savitzky_golay_advanced(tail, window_length=5, polyorder=2)
+            return [float(round(x, 2)) for x in sm]
+        except Exception:
+            return tail
+    except Exception:
+        return tail
+
+def compute_extended_closure_for_window(
+    forecast10: List[float],
+    windows10: List[Dict[str, int]],
+    target_start: int,
+    flush_events_details: List[Dict[str, Any]],
+    species_probabilities: Dict[str, float],
+    past_days: int,
+    future_days: int,
+    elev_m: float,
+    tmean_series: Optional[List[float]] = None,
+    base_threshold: float = 15.0,
+    extra_days: int = 120
+) -> Tuple[int, List[float]]:
+    """
+    Return (extended_end_index, extended_full_forecast) for the window whose 'start' index equals target_start.
+    """
+    if not windows10:
+        return (-1, forecast10[:])
+    tgt = None
+    for w in windows10:
+        if int(w.get("start", -999)) == int(target_start):
+            tgt = w; break
+    if not tgt:  # fallback first
+        tgt = windows10[0]
+    horizon_end = future_days - 1
+    if tgt.get("end", -1) < horizon_end:
+        return (int(tgt["end"]), forecast10[:])
+
+    tail = extend_forecast_bhc_v2(flush_events_details, species_probabilities, past_days, future_days, elev_m, tmean_series=tmean_series, extra_days=extra_days)
+    full = list(forecast10) + list(tail)
+    win_ext = detect_fruiting_windows(full, base_threshold=base_threshold)
+    match = None
+    for w in win_ext:
+        if int(w.get("start", -999)) == int(tgt.get("start", -998)):
+            match = w; break
+    if not match:
+        for w in win_ext:
+            if w.get("start", 10**9) <= tgt.get("end", -1) and w.get("end", -1) >= tgt.get("start", 10**9):
+                match = w; break
+    if not match:
+        return (int(tgt["end"]), full)
+    return (int(match.get("end", tgt["end"])), full)
+# ====== END BHC v2 ======
+
 def save_prediction_multi_species(lat: float, lon: float, date: str, 
                                  primary_species: str, secondary_species: str,
                                  coexistence_prob: float, primary_score: int,
@@ -1790,10 +1915,40 @@ def build_analysis_multi_species_v30(payload: Dict[str, Any]) -> str:
         if ext_date:
             d = datetime.fromisoformat(ext_date).date()
             mesi = ['gennaio','febbraio','marzo','aprile','maggio','giugno','luglio','agosto','settembre','ottobre','novembre','dicembre']
-            lines.append("<h4>🧮 Estensione deterministica (BHC)</h4>")
-            lines.append(f"<p><strong>Chiusura prevista:</strong> {d.day} {mesi[d.month-1]} {d.year}</p>")
+            lines.append("")
+            lines.append(f"<p><strong>Chiusura:</strong> {d.day} {mesi[d.month-1]} {d.year}</p>")
     except Exception:
         pass
+    
+    # === Previsione di Raccolta per Fasi ===
+    try:
+        phases = payload.get("phase_estimates", {})
+        mesi = ['gennaio','febbraio','marzo','aprile','maggio','giugno','luglio','agosto','settembre','ottobre','novembre','dicembre']
+        if phases.get("current"):
+            w = phases["current"]
+            # costruisci date umane
+            base_date = datetime.now(timezone.utc).date()
+            sd = (base_date + timedelta(days=w["start_day"] + 1)) if w["start_day"]>=0 else None
+            pd = (base_date + timedelta(days=w["peak_day"] + 1))  if w["peak_day"]>=0 else None
+            ed = (base_date + timedelta(days=w["end_day"] + 1))   if w["end_day"]>=0 else None
+            lines.append("<h3>📈 Previsione per fasi — Finestra in corso</h3>")
+            if sd and pd and ed:
+                lines.append(f"<p><strong>Inizio:</strong> {sd.day} {mesi[sd.month-1]} — <strong>Picco:</strong> {pd.day} {mesi[pd.month-1]} — <strong>Chiusura:</strong> {ed.day} {mesi[ed.month-1]}</p>")
+            if w.get("today"):
+                lines.append(f"<ul><li><strong>Oggi:</strong> {w['today']}</li><li><strong>All'inizio:</strong> {w['at_start']}</li><li><strong>Al picco:</strong> {w['at_peak']}</li><li><strong>Alla chiusura:</strong> {w['at_end']}</li></ul>")
+        if phases.get("next"):
+            w = phases["next"]
+            base_date = datetime.now(timezone.utc).date()
+            sd = (base_date + timedelta(days=w["start_day"] + 1)) if w["start_day"]>=0 else None
+            pd = (base_date + timedelta(days=w["peak_day"] + 1))  if w["peak_day"]>=0 else None
+            ed = (base_date + timedelta(days=w["end_day"] + 1))   if w["end_day"]>=0 else None
+            lines.append("<h3>⏭️ Previsione per fasi — Prossima finestra</h3>")
+            if sd and pd and ed:
+                lines.append(f"<p><strong>Inizio:</strong> {sd.day} {mesi[sd.month-1]} — <strong>Picco:</strong> {pd.day} {mesi[pd.month-1]} — <strong>Chiusura:</strong> {ed.day} {mesi[ed.month-1]}</p>")
+            lines.append(f"<ul><li><strong>All'inizio:</strong> {w.get('at_start','')}</li><li><strong>Al picco:</strong> {w.get('at_peak','')}</li><li><strong>Alla chiusura:</strong> {w.get('at_end','')}</li></ul>")
+    except Exception:
+        pass
+
     return "\n".join(lines)
 
 # ===== ENDPOINT PRINCIPALE MULTI-SPECIE =====
@@ -2221,6 +2376,52 @@ async def api_score_multi_species(
             response_payload["fruiting_window_end_extended_idx"] = -1
             response_payload["fruiting_window_end_extended_date"] = None
         
+        
+        # === Per-phase harvest estimates for current and next windows ===
+        def _harvest_for_index(idx: int) -> Tuple[str, str]:
+            try:
+                val = int(round(forecast_final[idx])) if isinstance(idx, int) and idx >= 0 and idx < len(forecast_final) else 0
+                return estimate_harvest_multi_species(val, confidence_5d["overall"], hours, species_probabilities)
+            except Exception:
+                return ("", "")
+        phase_estimates = {"current": {}, "next": {}}
+        if fruiting_windows:
+            w0 = fruiting_windows[0]
+            # override closure with extended if available
+            end0 = extended_end_idx if (locals().get("extended_end_idx", -1) or -1) >= 0 else w0.get("end", -1)
+            phase_estimates["current"] = {
+                "start_day": int(w0.get("start", -1)),
+                "peak_day": int(w0.get("peak", -1)),
+                "end_day": int(end0),
+                "today": _harvest_for_index(0)[0],
+                "at_start": _harvest_for_index(int(w0.get("start", -1)))[0],
+                "at_peak": _harvest_for_index(int(w0.get("peak", -1)))[0],
+                "at_end": _harvest_for_index(int(end0))[0]
+            }
+        if fruiting_windows and len(fruiting_windows) > 1:
+            w1 = fruiting_windows[1]
+            end1 = extended_end_idx2 if (locals().get("extended_end_idx2", -1) or -1) >= 0 else w1.get("end", -1)
+            phase_estimates["next"] = {
+                "start_day": int(w1.get("start", -1)),
+                "peak_day": int(w1.get("peak", -1)),
+                "end_day": int(end1),
+                "at_start": _harvest_for_index(int(w1.get("start", -1)))[0],
+                "at_peak": _harvest_for_index(int(w1.get("peak", -1)))[0],
+                "at_end": _harvest_for_index(int(end1))[0]
+            }
+        response_payload["phase_estimates"] = phase_estimates
+
+        # Attach BHC info
+        try:
+            if windows10:
+                response_payload["fruiting_window_end_extended_idx"] = int(extended_end_idx) if extended_end_idx is not None else -1
+                response_payload["fruiting_window_end_extended_date"] = extended_end_date
+                if len(windows10) > 1:
+                    response_payload["fruiting_window2_end_extended_idx"] = int(extended_end_idx2) if extended_end_idx2 is not None else -1
+                    response_payload["fruiting_window2_end_extended_date"] = extended_end_date2
+        except Exception:
+            pass
+    
         response_payload["dynamic_explanation"] = build_analysis_multi_species_v30(response_payload)
         
         if background_tasks:
