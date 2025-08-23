@@ -1325,5 +1325,94 @@ const labels = forecast.map((_, i) => {
       debugLog('🎉 Initialization completed - BoletusLab is ready!');
     });
   </script>
+
+<script>
+/* dynamic advice script injected by ChatGPT v2.6.1 — see previous cell for details */
+function renderDynamicAdvice(ctx){
+  const S = ctx.speciesDominant || 'reticulatus';
+  const stage = ctx.stage || 'ramp';
+  const h = (ctx.habitat||'misto').toLowerCase();
+  const elev = ctx.elevation||800;
+  const asp = ctx.aspect||'auto';
+  const lag = ctx.lagDays||9;
+  const sizeHint = (stage==='peak') ? 'medi-grandi' : (stage==='ramp'?'medi' : 'piccoli');
+  const exps = { cool: ['N','NE','NW'], warm: ['S','SE','SW','E','W'] };
+  const preferCool = (S==='edulis' || (S==='pinophilus' && ctx.month>=8));
+  const bestExpos = preferCool ? exps.cool : exps.warm;
+  const altShift = (stage==='pre'||stage==='ramp') ? (preferCool? +150 : -150) : 0;
+
+  function bullet(txt){ return '<li>'+txt+'</li>'; }
+
+  let where = '<ul>';
+  where += bullet('Concentra la ricerca su '+ (bestExpos.join(', ')) +' con suolo profondo e lettiera umida.');
+  if (altShift!==0){
+    where += bullet('Valuta uno spostamento altitudinale di ~'+Math.abs(altShift)+' m ' + (altShift>0?'in su':'in giù') + ' per intercettare il fronte di nascita.');
+  }
+  if (S==='aereus') where += bullet('Preferisci querceti/castagneti radi con chiome luminose dopo piogge non torrenziali.');
+  if (S==='reticulatus') where += bullet('Faggete/querceti con margini e radure; microdossi drenanti dopo piogge >8–10 mm.');
+  if (S==='edulis') where += bullet('Faggete/conifere a suolo fresco; evita creste ventose nelle ore centrali.');
+  if (S==='pinophilus') where += bullet('Pinete acide con muschio; margini di pista forestale con ombra mattutina.');
+  where += '</ul>';
+
+  let when = '';
+  if (stage==='pre'){
+    when = 'Fase pre-finestra: attendi lo sblocco dopo il lag biologico (~'+lag+' gg). Esci all’alba sulle esposizioni fresche; verifica micelio con piccoli primordi.';
+  } else if (stage==='ramp'){
+    when = 'Fase di rampa: uscite mirate nelle prime 24–48 h. Se oggi trovi poco, torna entro 36–60 h; la curva è in crescita.';
+  } else if (stage==='peak'){
+    when = 'Picco attivo: massimizza la copertura del terreno (traverse lente). Imposta linee parallele a 15–20 m; controlla ritorni dopo 24–48 h.';
+  } else if (stage==='closing'){
+    when = 'Fase di chiusura: restringi la ricerca a conche umide e impluvi poco ventosi. Riduci la frequenza: 1 uscita ogni 48–72 h.';
+  } else {
+    when = 'Finestra chiusa: sposta l’attenzione a quote/esposizioni alternative o attendi il prossimo evento piovoso efficace.';
+  }
+
+  let wait = '';
+  if (stage==='pre'){
+    wait = 'Aspetta almeno '+Math.max(24, Math.round((lag)*24))+' h prima di un’uscita piena; nel frattempo mappa i microhabitat.';
+  } else if (stage==='ramp'){
+    wait = 'Se oggi trovi poco, torna tra 36–60 h (accumulo umidità + maturazione primordi).';
+  } else if (stage==='closing'){
+    wait = 'Dopo il passaggio del picco, dilata a 48–72 h per permettere nuove ondate locali.';
+  } else if (stage==='post'){
+    wait = 'Attendi nuove piogge efficaci (>8–12 mm/24–48 h) e TM7 in range specie-specifici.';
+  } else {
+    wait = 'Ricontrollo consigliato ogni 24–48 h finché l’indice resta >40.';
+  }
+
+  return `
+    <h4>✅ Dove cercare oggi</h4>${where}
+    <h4>⏱️ Quando andare</h4><p>${when}</p>
+    <div class="return-advice"><strong>Quando tornare:</strong> ${wait}</div>
+    <h4>🧪 Segnali utili</h4>
+    <ul>
+      <li>Taglia attesa: <strong>${sizeHint}</strong>; controlla taglio internodale e consistenza.</li>
+      <li>VPD max ultime 24 h: <strong>${(ctx.vpd||0).toFixed(1)} hPa</strong> — penalità moderata se &gt;12 hPa.</li>
+      <li>Umidità cumulata 7–14 gg: <strong>${(ctx.cumulativeMoisture||0).toFixed(1)} mm ponderati</strong>.</li>
+    </ul>`;
+}
+window.BoletusLab = window.BoletusLab || {};
+BoletusLab.renderDynamicAdvice = renderDynamicAdvice;
+</script>
+
+<script>
+/* Helpers to classify today's stage and inject advice */
+function classifyStage(todayIdx, win){
+  if (todayIdx < win.start) return 'pre';
+  const span = win.end - win.start + 1;
+  const peakSpanL = Math.max(1, Math.round(0.2*span));
+  if (todayIdx <= Math.min(win.peak, win.start + peakSpanL)) return 'ramp';
+  if (todayIdx === win.peak || Math.abs(todayIdx - win.peak) <= Math.round(0.15*span)) return 'peak';
+  if (todayIdx <= win.end) return 'closing';
+  return 'post';
+}
+
+function injectAdvice(ctx){
+  const el = document.getElementById('field-analysis');
+  if (!el || !window.BoletusLab || !window.BoletusLab.renderDynamicAdvice) return;
+  el.innerHTML = window.BoletusLab.renderDynamicAdvice(ctx);
+}
+</script>
+
 </body>
   </html>
