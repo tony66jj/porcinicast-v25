@@ -84,8 +84,8 @@ def blend_to_neutral(value: float, neutral: float = 1.0, weight: float = 0.35) -
         return value
 
 app = FastAPI(
-    title="BoletusLab® v3.2.1 - Finestra di Fruttificazione Dinamica",
-    version="3.2.1",
+    title="BoletusLab® v3.3.0 - Finestra di Fruttificazione Dinamica",
+    version="3.3.0",
     description="Sistema multi-specie con durata della buttata variabile in base a specie, temperatura e VPD e visualizzazione finestra completa."
 )
 
